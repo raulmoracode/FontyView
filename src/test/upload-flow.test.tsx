@@ -284,3 +284,102 @@ describe("metrics diagram", () => {
     expect(diagram.textContent).toContain("em square 1,000 units");
   });
 });
+
+describe("specimen", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  async function openSpecimen() {
+    render(<App />);
+    selectFile(fixtureFile());
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Specimen" }));
+    await waitFor(() => {
+      expect(screen.getByText("SPECIMEN")).toBeDefined();
+    });
+  }
+
+  it("renders the standard character sets at the full size scale", async () => {
+    await openSpecimen();
+    const main = screen.getByRole("main");
+
+    // Each step of the scale renders a specimen at its own font size.
+    const specimens = [
+      ...main.querySelectorAll<HTMLElement>("[style*='font-size']"),
+    ];
+    const rendered = new Set(specimens.map((node) => node.style.fontSize));
+    for (const size of [
+      "12px",
+      "16px",
+      "20px",
+      "24px",
+      "32px",
+      "40px",
+      "48px",
+      "64px",
+      "80px",
+      "96px",
+      "120px",
+      "160px",
+    ]) {
+      expect(rendered.has(size)).toBe(true);
+    }
+
+    // Uppercase is the default tab.
+    expect(within(main).getByText("ABCDEFGHIJKLMNOPQRSTUVWXYZ")).toBeDefined();
+  });
+
+  it("renders text with the uploaded font, not a fallback", async () => {
+    await openSpecimen();
+    const main = screen.getByRole("main");
+
+    const state = useFontStore.getState();
+    expect(state.status).toBe("ready");
+    const family = state.loaded?.analysis.cssFamilyName;
+    expect(family).toBeTruthy();
+
+    const pangram = within(main).getByText(/The quick brown fox/);
+    expect(pangram.style.fontFamily).toContain(family as string);
+  });
+
+  it("re-renders custom text as the user types", async () => {
+    await openSpecimen();
+    const main = screen.getByRole("main");
+
+    const field = within(main).getByLabelText("Write your own text");
+    fireEvent.change(field, { target: { value: "Zebra stripes" } });
+
+    expect(within(main).getByText("Zebra stripes")).toBeDefined();
+    expect(within(main).queryByText(/quick brown fox/)).toBeNull();
+  });
+
+  it("applies a custom size to the scale", async () => {
+    await openSpecimen();
+    const main = screen.getByRole("main");
+
+    fireEvent.change(within(main).getByLabelText("Custom size"), {
+      target: { value: "222" },
+    });
+
+    expect(within(main).getByText("222px")).toBeDefined();
+  });
+
+  it("applies alignment from the controls", async () => {
+    await openSpecimen();
+    const main = screen.getByRole("main");
+
+    const trigger = within(main).getByRole("combobox", { name: "Alignment" });
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole("option", { name: "center" }));
+
+    const pangram = within(main).getByText(/quick brown fox/);
+    expect(pangram.style.textAlign).toBe("center");
+  });
+});
