@@ -9,6 +9,8 @@ import { BinaryReader } from "../binary-reader";
  */
 
 export type LookupType = {
+  /** True when this lookup only wraps another one behind a 32-bit offset. */
+  isExtension: boolean;
   lookupType: number;
   lookupFlag: number;
   markFilteringSet: number | null;
@@ -29,6 +31,16 @@ export type FeatureRecord = {
   featureParams: number | null;
 };
 
+/** One ligature the font can build, with the components it is made from. */
+export type Ligature = {
+  /** The glyph the sequence substitutes to. */
+  glyphId: number;
+  /** Glyph IDs of the components, in order. */
+  components: number[];
+  /** The lookup that holds this ligature. */
+  lookupIndex: number;
+};
+
 export type LayoutTable = {
   kind: "GSUB" | "GPOS";
   majorVersion: number;
@@ -36,6 +48,8 @@ export type LayoutTable = {
   scripts: ScriptRecord[];
   features: FeatureRecord[];
   lookups: LookupType[];
+  /** Ligatures found in substitution lookups. GSUB only. */
+  ligatures: Ligature[];
 };
 
 const LOOKUP_TYPE_NAMES: Record<number, string> = {
@@ -255,6 +269,30 @@ export const TOGGLEABLE_FEATURES = [
   "ss10",
 ];
 
+/** Coverage as a list of glyph IDs, expanding format 2 ranges. */
+function coverageGlyphs(bytes: Uint8Array, offset: number): number[] {
+  const reader = new BinaryReader(bytes).seek(offset);
+  const format = reader.uint16();
+  const glyphs: number[] = [];
+
+  if (format === 1) {
+    const count = reader.uint16();
+    for (let i = 0; i < count; i++) glyphs.push(reader.uint16());
+  } else if (format === 2) {
+    const rangeCount = reader.uint16();
+    for (let i = 0; i < rangeCount; i++) {
+      const start = reader.uint16();
+      const end = reader.uint16();
+      const startIndex = reader.uint16();
+      for (let glyph = start; glyph <= end; glyph++) {
+        glyphs.push(startIndex + (glyph - start));
+      }
+    }
+  }
+
+  return glyphs;
+}
+
 function readCoverage(reader: BinaryReader): { start: number; end: number }[] {
   const format = reader.uint16();
   const ranges: { start: number; end: number }[] = [];
@@ -275,11 +313,99 @@ function readCoverage(reader: BinaryReader): { start: number; end: number }[] {
   return ranges;
 }
 
+/**
+ * Reads a ligature substitution subtable (lookup type 4) and returns every
+ * ligature it can build, with the component glyphs in order.
+ */
+function readLigatureSubtable(
+  bytes: Uint8Array,
+  offset: number,
+  lookupIndex: number,
+): Ligature[] {
+  const ligatures: Ligature[] = [];
+  const reader = new BinaryReader(bytes).seek(offset);
+  const format = reader.uint16();
+  if (format !== 1) return ligatures;
+
+  const coverageOffset = reader.uint16();
+  const coverage = coverageGlyphs(bytes, offset + coverageOffset);
+  const setCount = reader.uint16();
+  const setOffsets: number[] = [];
+  for (let i = 0; i < setCount; i++) setOffsets.push(reader.uint16());
+
+  for (let i = 0; i < setCount; i++) {
+    const first = coverage[i];
+    if (first === undefined) continue;
+    const set = new BinaryReader(bytes).seek(offset + setOffsets[i]);
+    const ligatureCount = set.uint16();
+    for (let l = 0; l < ligatureCount; l++) {
+      const glyphId = set.uint16();
+      const componentCount = set.uint16();
+      // The first component is the one the coverage table points at.
+      const components = [first];
+      for (let c = 1; c < componentCount; c++) components.push(set.uint16());
+      ligatures.push({ glyphId, components, lookupIndex });
+    }
+  }
+
+  return ligatures;
+}
+
 /** Skips a lookup's subtables, reporting only the type and flag. */
+/**
+ * Walks one substitution or positioning subtable, keeping whatever it can
+ * learn about it. Both a plain subtable and the subtable an extension lookup
+ * points at come through here, so the two paths cannot drift apart.
+ */
+function walkSubtable(
+  bytes: Uint8Array,
+  absolute: number,
+  lookupType: number,
+  ligatures: Ligature[],
+  lookupIndex: number,
+): void {
+  const sub = new BinaryReader(bytes).seek(absolute);
+
+  if (
+    lookupType === 1 ||
+    lookupType === 2 ||
+    lookupType === 3 ||
+    lookupType === 9 ||
+    lookupType === 10
+  ) {
+    // Single, multiple, alternate and contextual substitution, and pair
+    // positioning, all start with a format and a coverage offset.
+    sub.uint16();
+    const coverageOffset = sub.uint16();
+    if (absolute + coverageOffset < bytes.byteLength) {
+      readCoverage(new BinaryReader(bytes).seek(absolute + coverageOffset));
+    }
+  } else if (lookupType === 4) {
+    ligatures.push(...readLigatureSubtable(bytes, absolute, lookupIndex));
+  } else if (lookupType === 11 || lookupType === 12 || lookupType === 13) {
+    // Cursive and mark attachment share a header shape.
+    sub.uint16();
+    readCoverage(new BinaryReader(bytes).seek(absolute + sub.uint16()));
+    sub.uint16(); // markArray
+    sub.uint16(); // baseArray
+    sub.uint16(); // ligatureArray
+    sub.uint16(); // mark2Array
+  }
+}
+
+/**
+ * Reads a lookup's header and walks each of its subtables. `extensionType` is
+ * 7 for GSUB and 9 for GPOS: the same number means contextual substitution in
+ * GSUB and extension in GPOS, so the caller has to say which table it is
+ * reading.
+ */
 function readLookup(
   bytes: Uint8Array,
   offset: number,
   size: 2 | 4,
+  ligatures: Ligature[],
+  lookupIndex: number,
+  extensionType: number,
 ): LookupType | null {
   try {
     const reader = new BinaryReader(bytes).seek(offset);
@@ -287,8 +413,10 @@ function readLookup(
     const lookupFlag = reader.uint16();
     const subTableCount = reader.uint16();
 
+    const isExtension = lookupType === extensionType;
+
     if (subTableCount === 0) {
-      return { lookupType, lookupFlag, markFilteringSet: null };
+      return { lookupType, lookupFlag, markFilteringSet: null, isExtension };
     }
 
     const subtableOffsets: number[] = [];
@@ -306,51 +434,26 @@ function readLookup(
     for (const subtableOffset of subtableOffsets) {
       const absolute = offset + subtableOffset;
       if (absolute >= bytes.byteLength) return null;
-      const sub = new BinaryReader(bytes).seek(absolute);
 
-      if (lookupType === 7) {
-        // Extension: format 1, then the real type and offset.
-        sub.uint16();
-        readLookup(bytes, absolute + sub.uint32(), 4);
-      } else if (
-        lookupType === 9 ||
-        lookupType === 2 ||
-        lookupType === 1 ||
-        lookupType === 3
-      ) {
+      if (isExtension) {
+        // An extension lookup wraps a subtable of the type named in its
+        // header, behind a 32-bit offset.
+        const sub = new BinaryReader(bytes).seek(absolute);
         sub.uint16(); // format
-        const coverageOffset = sub.uint16();
-        if (absolute + coverageOffset < bytes.byteLength) {
-          readCoverage(new BinaryReader(bytes).seek(absolute + coverageOffset));
-        }
-      } else if (lookupType === 10) {
-        sub.uint16();
-        const coverageOffset = sub.uint16();
-        if (absolute + coverageOffset < bytes.byteLength) {
-          readCoverage(new BinaryReader(bytes).seek(absolute + coverageOffset));
-        }
-      } else if (lookupType === 4) {
-        sub.uint16();
-        const coverageOffset = sub.uint16();
-        if (absolute + coverageOffset < bytes.byteLength) {
-          readCoverage(new BinaryReader(bytes).seek(absolute + coverageOffset));
-        }
-        const ligatureSetCount = sub.uint16();
-        for (let i = 0; i < ligatureSetCount; i++) {
-          sub.uint16();
-        }
-      } else if (lookupType === 11 || lookupType === 12 || lookupType === 13) {
-        // Cursive and mark attachment share a header shape.
-        sub.uint16();
-        readCoverage(new BinaryReader(bytes).seek(absolute + sub.uint16()));
-        sub.uint16(); // markArray
-        sub.uint16(); // baseArray
-        sub.uint16(); // ligatureArray
-        sub.uint16(); // mark2Array
+        const extendedType = sub.uint16();
+        walkSubtable(
+          bytes,
+          absolute + sub.uint32(),
+          extendedType,
+          ligatures,
+          lookupIndex,
+        );
+      } else {
+        walkSubtable(bytes, absolute, lookupType, ligatures, lookupIndex);
       }
     }
 
-    return { lookupType, lookupFlag, markFilteringSet };
+    return { lookupType, lookupFlag, markFilteringSet, isExtension };
   } catch {
     return null;
   }
@@ -366,10 +469,6 @@ export function parseLayoutTable(
   const scriptListOffset = reader.uint16();
   const featureListOffset = reader.uint16();
   const lookupListOffset = reader.uint16();
-
-  if (reader.remaining > 0 && majorVersion === 1 && minorVersion === 1) {
-    // Feature variations, present but not interpreted here.
-  }
 
   const scripts: ScriptRecord[] = [];
   if (scriptListOffset > 0) {
@@ -406,6 +505,8 @@ export function parseLayoutTable(
     }
   }
 
+  const extensionType = kind === "GSUB" ? 7 : 9;
+  const ligatures: Ligature[] = [];
   const lookups: LookupType[] = [];
   if (lookupListOffset > 0) {
     const lookupReader = new BinaryReader(bytes).seek(lookupListOffset);
@@ -413,13 +514,33 @@ export function parseLayoutTable(
     const offsets: number[] = [];
     for (let i = 0; i < lookupCount; i++) offsets.push(lookupReader.uint16());
 
-    for (const offset of offsets) {
-      const lookup = readLookup(bytes, lookupListOffset + offset, 2);
+    for (let i = 0; i < lookupCount; i++) {
+      const lookup = readLookup(
+        bytes,
+        lookupListOffset + offsets[i],
+        2,
+        ligatures,
+        i,
+        extensionType,
+      );
       lookups.push(
-        lookup ?? { lookupType: -1, lookupFlag: 0, markFilteringSet: null },
+        lookup ?? {
+          lookupType: -1,
+          lookupFlag: 0,
+          markFilteringSet: null,
+          isExtension: false,
+        },
       );
     }
   }
 
-  return { kind, majorVersion, minorVersion, scripts, features, lookups };
+  return {
+    kind,
+    majorVersion,
+    minorVersion,
+    scripts,
+    features,
+    lookups,
+    ligatures,
+  };
 }

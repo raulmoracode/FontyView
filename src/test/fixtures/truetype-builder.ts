@@ -392,24 +392,53 @@ function buildGsub(): Uint8Array {
     return w.done();
   })();
 
+  /**
+   * A ligature substitution subtable, shared by lookup 0 and by the extension
+   * lookup below. Coverage is format 1 with two glyphs, so there are two
+   * ligature sets: one for glyphs starting with f and one for glyphs starting
+   * with i. The first set holds a two-component ligature and a three-component
+   * one, so both lengths are covered. A ligature record stores every component
+   * after the first, because the first comes from the coverage table.
+   */
+  const ligatureSubtable = (() => {
+    const w = writer();
+    // Subtable header: format, coverage offset, set count, then one offset per
+    // set, so five uint16s before the first set.
+    w.u16(1); // format
+    w.u16(34); // coverageOffset
+    w.u16(2); // ligatureSetCount
+    w.u16(10); // ligatureSetOffset[0], the set starting with f
+    w.u16(26); // ligatureSetOffset[1], the set starting with i
+    // Ligature set 0: two ligatures starting with f.
+    w.u16(2); // ligatureCount
+    w.u16(3); // ligature glyph: the composite f + i -> fi
+    w.u16(2); // componentCount, the first of which is f from coverage
+    w.u16(2); // second component
+    w.u16(4); // ligature glyph
+    w.u16(3); // componentCount
+    w.u16(1); // second component
+    w.u16(2); // third component
+    // Ligature set 1: one ligature starting with i.
+    w.u16(1); // ligatureCount
+    w.u16(4); // ligature glyph
+    w.u16(2); // componentCount, the first of which is i from coverage
+    w.u16(1); // second component
+    // Coverage, format 1, listing the first glyph of each set.
+    w.u16(1);
+    w.u16(2);
+    w.u16(1);
+    w.u16(2);
+    return w.done();
+  })();
+
   // Lookup 0: ligature substitution, f + i -> fi.
   const ligatureLookup = (() => {
     const w = writer();
-    w.u16(4);
-    w.u16(0);
+    w.u16(4); // lookupType
+    w.u16(0); // lookupFlag
     w.u16(1); // subtableCount
     w.u16(8); // subtable offset
-    // coverage format 1
-    w.u16(1);
-    w.u16(2);
-    w.u16(1);
-    w.u16(2);
-    // ligature set
-    w.u16(1);
-    w.u16(8);
-    w.u16(1); // ligatureCount
-    w.u16(1); // component glyph 2
-    w.u16(3); // ligature glyph 3
+    w.raw(ligatureSubtable);
     return w.done();
   })();
 
@@ -439,7 +468,7 @@ function buildGsub(): Uint8Array {
     w.u16(8);
     w.u16(1); // format 1
     w.u16(1); // extensionLookupType
-    w.u16(12); // extension offset
+    w.u32(8); // extension offset, an Offset32 past the 8-byte header
     // Wrapped single substitution subtable.
     w.u16(1);
     w.u16(8); // coverage offset
@@ -448,8 +477,28 @@ function buildGsub(): Uint8Array {
     return w.done();
   })();
 
+  // Lookup 3: the same ligature subtable behind an extension lookup, so the
+  // ligature reader is exercised through the 32-bit offset path too.
+  const ligatureExtensionLookup = (() => {
+    const w = writer();
+    w.u16(7); // extension
+    w.u16(0); // lookupFlag
+    w.u16(1); // subtableCount
+    w.u16(8); // subtable offset
+    w.u16(1); // format 1
+    w.u16(4); // extensionLookupType: ligature substitution
+    w.u32(8); // extension offset, an Offset32 past the 8-byte header
+    w.raw(ligatureSubtable);
+    return w.done();
+  })();
+
   const lookupList = (() => {
-    const lookups = [ligatureLookup, positioningLookup, extensionLookup];
+    const lookups = [
+      ligatureLookup,
+      positioningLookup,
+      extensionLookup,
+      ligatureExtensionLookup,
+    ];
     const headerSize = 2 + lookups.length * 2;
     const w = writer();
     w.u16(lookups.length);

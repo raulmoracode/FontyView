@@ -1276,3 +1276,80 @@ describe("glyph outline viewer", () => {
     );
   });
 });
+
+describe("ligatures view", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  async function openLigatures(
+    font = new File([buildTrueTypeFont({ gsub: true })], "Liga.ttf"),
+  ) {
+    render(<App />);
+    selectFile(font);
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ligatures" }));
+    await waitFor(() => {
+      expect(screen.getByText("LIGATURES")).toBeDefined();
+    });
+    return screen.getByRole("main");
+  }
+
+  it("lists the real ligatures with their components drawn", async () => {
+    const main = await openLigatures();
+
+    expect(main.textContent).toContain("6 ligatures");
+    expect(main.textContent).toContain("2 lookups");
+
+    // The fixture's ligatures are f+i -> fi, f+f+i and i+f.
+    const images = within(main).getAllByRole("img");
+    expect(images.length).toBeGreaterThan(0);
+    expect(images[0].getAttribute("aria-label")).toMatch(/^Component 1/);
+
+    // Every glyph is drawn from real path data, including the composite fi.
+    const drawn = [...images].filter((image) =>
+      image.querySelector("path")?.getAttribute("d"),
+    );
+    expect(drawn.length).toBe(images.length);
+  });
+
+  it("shows which features reach each lookup", async () => {
+    const main = await openLigatures();
+
+    // The fixture wires liga, kern and ss01 to lookup 0, and leaves the
+    // extension lookup unreferenced.
+    expect(main.textContent).toContain("liga");
+    expect(main.textContent).toContain("Unreferenced");
+    expect(main.textContent).toContain("(ext)");
+  });
+
+  it("filters the list by name, character or feature", async () => {
+    const main = await openLigatures();
+
+    fireEvent.change(
+      within(main).getByLabelText("Name, character or feature"),
+      {
+        target: { value: "liga" },
+      },
+    );
+
+    expect(within(main).queryByText("Unreferenced")).toBeNull();
+    expect(within(main).getAllByRole("row").length).toBeLessThan(7);
+  });
+
+  it("says a font without GSUB defines no ligatures", async () => {
+    const main = await openLigatures(
+      new File([buildTrueTypeFont()], "Plain.ttf"),
+    );
+
+    expect(main.textContent).toContain("no");
+    expect(main.textContent).toContain("GSUB");
+    expect(within(main).queryByRole("img")).toBeNull();
+  });
+});
