@@ -56,7 +56,12 @@ function renderSection(
     case "metrics":
       return <FontMetricsView structure={loaded.structure} />;
     case "specimen":
-      return <Specimen family={loaded.analysis.cssFamilyName} />;
+      return (
+        <Specimen
+          family={loaded.analysis.cssFamilyName}
+          layout={loaded.structure.layout}
+        />
+      );
     case "features":
       return <OpenTypeFeatures layout={loaded.structure.layout} />;
     default:
