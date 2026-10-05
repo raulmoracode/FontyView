@@ -10,6 +10,7 @@ import {
 import { GlyphMetricsView } from "@/components/font/glyph-metrics-view";
 import { GlyphOutlineViewer } from "@/components/font/glyph-outline-viewer";
 import { KerningViewer } from "@/components/font/kerning-viewer";
+import { LigaturesView } from "@/components/font/ligatures-view";
 import { OpenTypeFeatures } from "@/components/font/opentype-features";
 import { OpenTypeTables } from "@/components/font/opentype-tables";
 import { Overview } from "@/components/font/overview";
@@ -23,9 +24,14 @@ import { AnalyzingScreen } from "@/components/upload/analyzing-screen";
 import { UploadScreen } from "@/components/upload/upload-screen";
 import { useFontRegistration } from "@/hooks/use-font-registration";
 import { buildCoverage, type CoverageSummary } from "@/lib/font/coverage";
-import { createGlyphSource, readRawGlyph } from "@/lib/font/font-source";
+import {
+  createGlyphSource,
+  readOutline,
+  readRawGlyph,
+} from "@/lib/font/font-source";
 import { categoryOf } from "@/lib/font/glyph-query";
 import { buildGlyphList, type GlyphEntry } from "@/lib/font/glyphs";
+import { glyphToPath } from "@/lib/font/outline-path";
 import { toVariationSettings } from "@/lib/font/tables/variations";
 import { CATEGORY_LABELS } from "@/lib/font/unicode-category";
 import { blockForCodepoint } from "@/lib/font/unicode-data";
@@ -98,6 +104,37 @@ function buildDetail(
 }
 
 /** Raw `glyf` data is only available for TrueType-outline fonts. */
+/**
+ * Path data for a glyph, preferring the font's own `glyf` records because they
+ * need no second parser, and falling back to opentype.js for CFF outlines.
+ */
+function outlineFor(loaded: LoadedFontState, glyphId: number) {
+  const raw = readRawGlyphFor(loaded, glyphId);
+  if (raw && !raw.isEmpty) {
+    return {
+      path: glyphToPath(raw, (id) => readRawGlyphFor(loaded, id)),
+      xMin: raw.xMin,
+      yMin: raw.yMin,
+      xMax: raw.xMax,
+      yMax: raw.yMax,
+    };
+  }
+
+  const outline = readOutline(
+    createGlyphSource(loaded.structure, loaded.font),
+    glyphId,
+  );
+  return outline
+    ? {
+        path: outline.path,
+        xMin: outline.xMin,
+        yMin: outline.yMin,
+        xMax: outline.xMax,
+        yMax: outline.yMax,
+      }
+    : null;
+}
+
 function readRawGlyphFor(loaded: LoadedFontState, glyphId: number) {
   if (loaded.structure.loca === null) return null;
   const source = createGlyphSource(loaded.structure, loaded.font);
@@ -220,6 +257,46 @@ function renderSection(
           }
         />
       );
+    case "ligatures": {
+      const gsub = loaded.structure.layout.find(
+        (table) => table.kind === "GSUB",
+      );
+      const featuresByLookup = new Map<number, string[]>();
+      for (const feature of gsub?.features ?? []) {
+        for (const index of feature.lookupIndices) {
+          const existing = featuresByLookup.get(index) ?? [];
+          existing.push(feature.tag);
+          featuresByLookup.set(index, existing);
+        }
+      }
+      return (
+        <LigaturesView
+          ligatures={gsub?.ligatures ?? []}
+          hasGsub={gsub !== undefined}
+          extendedLookups={
+            new Set(
+              (gsub?.lookups ?? [])
+                .map((lookup, index) => [lookup, index] as const)
+                .filter(([lookup]) => lookup.isExtension)
+                .map(([, index]) => index),
+            )
+          }
+          featuresByLookup={featuresByLookup}
+          glyphNames={
+            loaded.structure.post?.glyphNames
+              ? new Map(
+                  loaded.structure.post.glyphNames.map((name, index) => [
+                    index,
+                    name,
+                  ]),
+                )
+              : new Map()
+          }
+          codepoints={glyphToCodepoint(loaded.cmap.mapping)}
+          outlines={(glyphId) => outlineFor(loaded, glyphId)}
+        />
+      );
+    }
     default:
       return <Placeholder title={SECTION_TITLES[active]} />;
   }
