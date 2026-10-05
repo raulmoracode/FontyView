@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CharacterMap } from "@/components/font/character-map";
+import { ExportJsonCard } from "@/components/font/export-json-card";
 import { FontInformation } from "@/components/font/font-information";
 import { FontMetricsView } from "@/components/font/font-metrics";
 import { GlyphBrowser } from "@/components/font/glyph-browser";
@@ -256,6 +257,17 @@ function renderSection(
               : new Map()
           }
         />
+      );
+    case "export":
+      return (
+        <div className="flex flex-col gap-8">
+          <header>
+            <h2 className="text-sm font-medium tracking-wide text-muted-foreground">
+              EXPORT
+            </h2>
+          </header>
+          <ExportJsonCard loaded={loaded} glyphs={glyphs} />
+        </div>
       );
     case "ligatures": {
       const gsub = loaded.structure.layout.find(
