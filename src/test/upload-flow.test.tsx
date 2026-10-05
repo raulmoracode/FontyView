@@ -818,7 +818,7 @@ describe("scripts", () => {
   });
 });
 
-describe("glyph grid", () => {
+describe("glyph browser", () => {
   beforeEach(() => {
     useFontStore.getState().clearFont();
   });
@@ -875,5 +875,106 @@ describe("glyph grid", () => {
     const cell = screen.getByRole("button", { name: /Glyph 1, A/ });
     const glyphFace = cell.querySelector<HTMLElement>("[style*='font-family']");
     expect(glyphFace?.style.fontFamily).toContain(family as string);
+  });
+});
+
+describe("glyph search, filters and sorting", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  async function openBrowser() {
+    render(<App />);
+    selectFile(fixtureFile());
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Glyphs" }));
+    await waitFor(() => {
+      expect(screen.getByText("GLYPHS")).toBeDefined();
+    });
+    return screen.getByRole("main");
+  }
+
+  const present = (main: HTMLElement, glyphId: number, char: string | null) =>
+    within(main).queryByRole("button", {
+      name: char ? `Glyph ${glyphId}, ${char}` : `Glyph ${glyphId}`,
+    }) !== null;
+
+  it("searches by character, code point and glyph ID", async () => {
+    const main = await openBrowser();
+    const field = within(main).getByLabelText("Search glyphs");
+
+    // The fixture's five glyphs are 0, 1 (A), 2 (B), 3 (composite) and 4 (é).
+    for (const query of ["a", "A", "0041", "U+0041", "1"]) {
+      fireEvent.change(field, { target: { value: query } });
+      expect(main.textContent).toContain("1 of 5");
+      expect(present(main, 1, "A")).toBe(true);
+    }
+
+    fireEvent.change(field, { target: { value: "e" } });
+    expect(present(main, 4, "é")).toBe(true);
+    expect(present(main, 1, "A")).toBe(false);
+
+    fireEvent.change(field, { target: { value: "zzzz" } });
+    expect(main.textContent).toContain("No glyph matches these filters.");
+  });
+
+  it("filters by Unicode category", async () => {
+    const main = await openBrowser();
+
+    // Only the fixture's two Latin letters and one accented letter are letters.
+    fireEvent.click(within(main).getByRole("button", { name: /^Letters/ }));
+    expect(main.textContent).toContain("3 of 5");
+    expect(present(main, 1, "A")).toBe(true);
+    expect(present(main, 0, null)).toBe(false);
+
+    // Clearing the filter restores every glyph, and the badge drops the
+    // "of" form because nothing is being filtered.
+    fireEvent.click(within(main).getByRole("button", { name: /^All/ }));
+    expect(main.textContent).toContain("5 glyphs");
+    expect(main.textContent).not.toContain("of 5");
+    expect(present(main, 0, null)).toBe(true);
+  });
+
+  it("filters by script", async () => {
+    const main = await openBrowser();
+
+    fireEvent.click(within(main).getByRole("combobox", { name: "Script" }));
+    fireEvent.click(await screen.findByRole("option", { name: /^Latin/ }));
+
+    expect(main.textContent).toContain("3 of 5");
+    expect(present(main, 4, "é")).toBe(true);
+    expect(present(main, 0, null)).toBe(false);
+  });
+
+  it("sorts by glyph ID and reverses on demand", async () => {
+    const main = await openBrowser();
+    const field = within(main).getByLabelText("Search glyphs");
+
+    // Search "1" so only glyph 1 is in the list, then confirm ordering
+    // through the count and the sort control.
+    fireEvent.click(within(main).getByRole("combobox", { name: "Sort by" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Glyph ID" }));
+    fireEvent.click(
+      within(main).getByRole("button", { name: "Sort descending" }),
+    );
+    fireEvent.click(
+      within(main).getByRole("button", { name: "Sort ascending" }),
+    );
+
+    fireEvent.change(field, { target: { value: "é" } });
+    expect(present(main, 4, "é")).toBe(true);
+
+    // With "é" selected, sorting by advance width puts the widest first.
+    fireEvent.change(field, { target: { value: "" } });
+    fireEvent.click(within(main).getByRole("button", { name: /^Unassigned/ }));
+    expect(main.textContent).toContain("2 of 5");
+    expect(present(main, 0, null)).toBe(true);
+    expect(present(main, 3, null)).toBe(true);
   });
 });
