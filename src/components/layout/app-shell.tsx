@@ -78,6 +78,7 @@ export function FontHeader({
 
 export function AppShell({
   analysis,
+  isVariable,
   active,
   onSelect,
   onExport,
@@ -85,6 +86,8 @@ export function AppShell({
   children,
 }: {
   analysis: FontAnalysis;
+  /** Gates sections that only make sense for a variable font. */
+  isVariable: boolean;
   active: SectionId;
   onSelect: (id: SectionId) => void;
   onExport: () => void;
@@ -93,7 +96,7 @@ export function AppShell({
 }) {
   const [isNavOpen, setIsNavOpen] = useState(false);
   const clearFont = useFontStore((state) => state.clearFont);
-  const availability = { isVariable: false };
+  const availability = { isVariable };
 
   const sidebar = (
     <AppSidebar

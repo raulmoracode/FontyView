@@ -1082,3 +1082,119 @@ describe("glyph metrics view", () => {
     expect(main.textContent).toContain("Widest glyphs");
   });
 });
+
+describe("variable fonts", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  async function openVariable(font: File) {
+    render(<App />);
+    selectFile(font);
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Variable" }));
+    await waitFor(() => {
+      expect(screen.getByText("VARIABLE")).toBeDefined();
+    });
+    return screen.getByRole("main");
+  }
+
+  it("hides the section entirely for a static font", async () => {
+    render(<App />);
+    selectFile(fixtureFile());
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+    expect(screen.queryByRole("button", { name: "Variable" })).toBeNull();
+  });
+
+  it("reads the axes the font declares", async () => {
+    const main = await openVariable(
+      new File([buildTrueTypeFont({ variable: true })], "Variable.ttf"),
+    );
+
+    expect(main.textContent).toContain("3 axes");
+    expect(main.textContent).toContain("Named instances");
+
+    // Real axis names, limits and defaults from fvar and the name table.
+    const weight = within(main)
+      .getByText(/^Weight$/)
+      .closest("div")?.parentElement;
+    expect(weight?.textContent).toContain("wght");
+    expect(weight?.textContent).toContain("100 pt");
+    expect(weight?.textContent).toContain("default 400 pt");
+    expect(weight?.textContent).toContain("900 pt");
+
+    expect(main.textContent).toContain("Width");
+    expect(main.textContent).toContain("Optical size");
+  });
+
+  it("lists the named instances the font declares", async () => {
+    const main = await openVariable(
+      new File([buildTrueTypeFont({ variable: true })], "Variable.ttf"),
+    );
+
+    for (const name of ["Light", "Regular", "Bold", "Wide Bold"]) {
+      expect(within(main).getAllByText(name).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("applies an instance to the specimen", async () => {
+    const main = await openVariable(
+      new File([buildTrueTypeFont({ variable: true })], "Variable.ttf"),
+    );
+
+    // Start at the defaults.
+    const preview = within(main).getByText("Handgloves 0123");
+    expect(preview.style.fontVariationSettings).toBe("normal");
+
+    fireEvent.click(within(main).getAllByRole("button", { name: "Bold" })[0]);
+    // Axes are emitted in the order the font declares them, not sorted.
+    expect(preview.style.fontVariationSettings).toBe('"wght" 700, "opsz" 20');
+
+    fireEvent.click(
+      within(main).getAllByRole("button", { name: "Wide Bold" })[0],
+    );
+    expect(preview.style.fontVariationSettings).toBe(
+      '"wght" 700, "wdth" 125, "opsz" 20',
+    );
+
+    fireEvent.click(
+      within(main).getByRole("button", { name: /Reset to defaults/ }),
+    );
+    expect(preview.style.fontVariationSettings).toBe("normal");
+  });
+
+  it("drives the specimen from the variable section", async () => {
+    render(<App />);
+    selectFile(
+      new File([buildTrueTypeFont({ variable: true })], "Variable.ttf"),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Variable" }));
+    await waitFor(() => {
+      expect(screen.getByText("VARIABLE")).toBeDefined();
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Light" })[0]);
+
+    // The specimen keeps the position once the section is left.
+    fireEvent.click(screen.getByRole("button", { name: "Specimen" }));
+    await waitFor(() => {
+      expect(screen.getByText("SPECIMEN")).toBeDefined();
+    });
+    // The pangram also appears in the header, so scope to the main region.
+    const specimen = within(screen.getByRole("main")).getByText(
+      /quick brown fox/,
+    );
+    expect(specimen.style.fontVariationSettings).toBe('"wght" 300, "opsz" 14');
+  });
+});
