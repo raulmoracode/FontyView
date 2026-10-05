@@ -978,3 +978,107 @@ describe("glyph search, filters and sorting", () => {
     expect(present(main, 3, null)).toBe(true);
   });
 });
+
+describe("glyph detail", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  async function openGlyphs() {
+    render(<App />);
+    selectFile(fixtureFile());
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Glyphs" }));
+    await waitFor(() => {
+      expect(screen.getByText("GLYPHS")).toBeDefined();
+    });
+    return screen.getByRole("main");
+  }
+
+  it("shows real metrics for a selected glyph", async () => {
+    const main = await openGlyphs();
+
+    // Nothing selected yet.
+    expect(main.textContent).toContain("Glyph 0");
+
+    fireEvent.click(within(main).getByRole("button", { name: /Glyph 1, A/ }));
+
+    const rowText = (label: string) =>
+      main.textContent?.includes(label) ?? false;
+
+    // Advance width and bearings come from hmtx.
+    expect(rowText("Advance width")).toBe(true);
+    expect(rowText("600")).toBe(true);
+    expect(rowText("Left side bearing")).toBe(true);
+    // Right bearing is advance minus xMax, computed from the real values.
+    expect(rowText("Right side bearing")).toBe(true);
+
+    // The bounding box and outline counts come from the glyf record.
+    expect(rowText("Bounding box")).toBe(true);
+    expect(rowText("xMin")).toBe(true);
+    expect(rowText("Contours")).toBe(true);
+    expect(rowText("Points")).toBe(true);
+
+    // The selection is reflected on the cell.
+    expect(
+      within(main)
+        .getByRole("button", { name: /Glyph 1, A/ })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("reports the real point count for the composite glyph", async () => {
+    const main = await openGlyphs();
+    fireEvent.click(within(main).getByRole("button", { name: "Glyph 3" }));
+
+    // The fixture's glyph 3 is a composite of glyphs 1 and 2.
+    expect(main.textContent).toContain("Composite");
+    expect(main.textContent).toContain("2");
+  });
+
+  it("keeps the grid and the detail side by side", async () => {
+    const main = await openGlyphs();
+    fireEvent.click(within(main).getByRole("button", { name: /Glyph 2, B/ }));
+
+    // The grid is still present alongside the panel.
+    expect(
+      within(main).getByRole("button", { name: /Glyph 1, A/ }),
+    ).toBeDefined();
+    expect(main.textContent).toContain("560");
+  });
+});
+
+describe("glyph metrics view", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("summarises advance widths across the font", async () => {
+    render(<App />);
+    selectFile(fixtureFile());
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Glyph Metrics" }));
+    await waitFor(() => {
+      expect(screen.getByText("GLYPH METRICS")).toBeDefined();
+    });
+
+    const main = screen.getByRole("main");
+    // The fixture's advances are 0, 600, 560, 1160 and 700.
+    expect(main.textContent).toContain("5 measured");
+    expect(main.textContent).toContain("Advance width distribution");
+    expect(main.textContent).toContain("Widest glyphs");
+  });
+});

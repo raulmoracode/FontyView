@@ -9,6 +9,7 @@ import {
   createUnpackedFont,
   type FontStructure,
   readFontStructure,
+  type UnpackedFont,
   unpackFont,
 } from "./font-source";
 import { describeTable } from "./table-descriptions";
@@ -29,6 +30,8 @@ export type LoadedFont = {
   analysis: FontAnalysis;
   structure: FontStructure;
   cmap: CmapAnalysis;
+  /** The unpacked sfnt, kept so glyph outlines can be read on demand. */
+  font: UnpackedFont;
   /** The bytes exactly as the browser supplied them, for FontFace registration. */
   bytes: Uint8Array;
   container: ContainerInfo;
@@ -193,6 +196,7 @@ export async function analyzeFontFile(
     },
     structure,
     cmap,
+    font,
     bytes,
     container,
   };

@@ -47,9 +47,27 @@ type Props = {
   scriptOf: (glyph: GlyphEntry) => string | undefined;
   selectedGlyphId?: number | null;
   onSelect?: (glyph: GlyphEntry) => void;
+  /** Rendered beside the grid, typically the detail panel. */
+  detail?: React.ReactNode;
 };
 
-export function GlyphBrowser({
+export function GlyphBrowser(props: Props) {
+  const detail = props.detail;
+  if (!detail) return <GlyphGridPane {...props} />;
+
+  return (
+    <div className="flex flex-col gap-6 xl:flex-row-reverse">
+      <div className="xl:w-80 xl:shrink-0">
+        <div className="xl:sticky xl:top-4">{detail}</div>
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <GlyphGridPane {...props} />
+      </div>
+    </div>
+  );
+}
+
+function GlyphGridPane({
   glyphs,
   family,
   scriptOf,
