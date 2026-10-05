@@ -1,6 +1,13 @@
-# fontyview
+# FontyView
 
-This is a **React + Vite** project generated with [`@raulmoracode/create`](https://github.com/raulmoracode/raulmoracode-create).
+A browser-based font analysis workbench. Load a `TTF`, `OTF`, `WOFF` or `WOFF2`
+file and inspect its real metadata, specimen, glyphs, Unicode coverage,
+metrics, OpenType tables and more.
+
+Every byte is parsed and analysed locally. No font is uploaded, and no font file
+is stored in the repository — test fixtures are generated in memory.
+
+Built with [`@raulmoracode/create`](https://github.com/raulmoracode/raulmoracode-create).
 
 ## Requirements
 
@@ -32,6 +39,7 @@ pnpm dev
 - **shadcn** — `components.json` + `cn()` helper (`src/lib/utils.ts`)
 - **Zustand 5.0.15** — global state
 - **Biome 2.5.14** — formatter, linter and organize imports
+- **opentype.js 2.0.0 + brotli-dec-wasm 2.3.2** — outline decoding and WOFF2 decompression
 - **Vitest 5.0.2 + Testing Library** — tests run in `jsdom`
 - **Husky 9.1.7 + Commitlint** — Git hooks and Conventional Commits
 - **VS Code** — Biome set as default formatter, format on save
@@ -66,13 +74,20 @@ fix: handle invalid input
 ├── index.html           # tab title + favicon (raulmoracode branding)
 ├── src/
 │   ├── main.tsx     # entry point
-│   ├── App.tsx      # root component
+│   ├── App.tsx      # root component and section routing
 │   ├── index.css    # Tailwind entry point
-│   ├── App.css      # root styles
-│   ├── components/  # shadcn components land here
-│   ├── hooks/       # registry hooks land here
-│   ├── lib/         # cn() in utils.ts
-│   └── test/        # smoke test
+│   ├── components/  # shadcn UI plus the app's own components
+│   │   ├── ui/      # shadcn primitives
+│   │   ├── font/    # analysis views
+│   │   ├── layout/  # shell and sidebar
+│   │   └── upload/  # empty state, drop zone, progress
+│   ├── hooks/       # registry hooks plus use-font-registration
+│   ├── lib/
+│   │   ├── utils.ts # cn()
+│   │   ├── format.ts
+│   │   └── font/    # binary reader, containers, tables, analysis
+│   ├── store/       # zustand stores
+│   └── test/        # tests and in-memory font fixtures
 ├── components.json      # shadcn config (includes the @raulmoracode registry)
 ├── pnpm-workspace.yaml  # minimumReleaseAge policy + excludes
 └── AGENTS.md            # guidelines for AI coding agents
