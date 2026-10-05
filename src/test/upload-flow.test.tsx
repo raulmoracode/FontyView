@@ -105,3 +105,50 @@ describe("font upload flow", () => {
     expect(document.body.textContent).not.toMatch(/undefined|Cannot read/);
   });
 });
+
+describe("font information", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  async function openInformation() {
+    render(<App />);
+    selectFile(fixtureFile());
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Font Information" }));
+    await waitFor(() => {
+      expect(screen.getByText("FONT INFORMATION")).toBeDefined();
+    });
+  }
+
+  it("shows the naming records decoded from the name table", async () => {
+    await openInformation();
+
+    const main = screen.getByRole("main");
+    const rowText = (label: string) =>
+      within(main).getByText(label).closest("tr")?.textContent ?? "";
+
+    expect(rowText("Family Name")).toContain("Fixture TrueType");
+    expect(rowText("Subfamily Name")).toContain("Regular");
+    expect(rowText("PostScript Name")).toContain("Fixture TrueType-Regular");
+    expect(rowText("Version")).toContain("Version 1.000");
+  });
+
+  it("marks fields the font does not carry as not available", async () => {
+    await openInformation();
+
+    const main = screen.getByRole("main");
+    const rowText = (label: string) =>
+      within(main).getByText(label).closest("tr")?.textContent ?? "";
+
+    expect(rowText("Designer")).toContain("Not available");
+    expect(rowText("License")).toContain("Not available");
+    expect(rowText("Trademark")).toContain("Not available");
+  });
+});

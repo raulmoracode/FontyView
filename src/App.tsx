@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { FontInformation } from "@/components/font/font-information";
 import { Overview } from "@/components/font/overview";
 import { AppShell } from "@/components/layout/app-shell";
 import type { SectionId } from "@/components/layout/app-sidebar";
@@ -37,6 +38,20 @@ const SECTION_TITLES: Record<SectionId, string> = {
   export: "Export Report",
 };
 
+function renderSection(
+  active: SectionId,
+  loaded: NonNullable<ReturnType<typeof useFontStore.getState>["loaded"]>,
+) {
+  switch (active) {
+    case "overview":
+      return <Overview analysis={loaded.analysis} />;
+    case "information":
+      return <FontInformation records={loaded.structure.names} />;
+    default:
+      return <Placeholder title={SECTION_TITLES[active]} />;
+  }
+}
+
 function App() {
   const status = useFontStore((state) => state.status);
   const loaded = useFontStore((state) => state.loaded);
@@ -62,11 +77,7 @@ function App() {
         onExport={() => setActive("export")}
         onLoadAnother={() => loadAnotherRef.current?.click()}
       >
-        {active === "overview" ? (
-          <Overview analysis={loaded.analysis} />
-        ) : (
-          <Placeholder title={SECTION_TITLES[active]} />
-        )}
+        {renderSection(active, loaded)}
       </AppShell>
 
       <input
