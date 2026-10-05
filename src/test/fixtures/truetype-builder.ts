@@ -643,6 +643,68 @@ export const VARIABLE_INSTANCES: { name: string; coordinates: number[] }[] = [
   { name: "Wide Bold", coordinates: [700 << 16, 125 << 16, 20 << 16] },
 ];
 
+/**
+ * Builds an `fvar` table with an explicit `axisSize` and `instanceSize`, so a
+ * font that declares a size smaller than the parser's own arithmetic can be
+ * reproduced. Real fonts do this: STIX Two Text declares an `instanceSize` of 8
+ * for a single-axis font, where reading the instance properly needs 10.
+ */
+export function buildFvarWithSizes(
+  axisNames: { tag: string; name: string }[],
+  instances: { name: string; coordinates: number[] }[],
+  baseNameId: number,
+  sizes: { axisSize: number; instanceSize: number },
+): { fvar: Uint8Array; names: { nameId: number; value: string }[] } {
+  const axisCount = axisNames.length;
+  const { axisSize, instanceSize } = sizes;
+  const w = writer();
+
+  w.u16(1);
+  w.u16(0);
+  w.u16(16); // axesArrayOffset
+  w.u16(2); // reserved
+  w.u16(axisCount);
+  w.u16(axisSize);
+  w.u16(instances.length);
+  w.u16(instanceSize);
+
+  // Written exactly as a font would lay them out, padding any declared size
+  // that is larger than the fields actually present.
+  axisNames.forEach((axis, index) => {
+    const start = w.bytes.length;
+    w.tag(axis.tag);
+    w.u32(minimumFor(axis.tag));
+    w.u32(defaultFor(axis.tag));
+    w.u32(maximumFor(axis.tag));
+    w.u16(0); // flags
+    w.u16(baseNameId + index);
+    padTo(w, start + axisSize);
+  });
+
+  instances.forEach((instance) => {
+    const start = w.bytes.length;
+    w.u16(baseNameId + axisCount);
+    w.u16(0); // flags
+    for (const value of instance.coordinates) w.u32(value);
+    w.u16(0); // postScriptNameID
+    padTo(w, start + instanceSize);
+  });
+
+  const names = [
+    ...axisNames.map((axis, index) => ({
+      nameId: baseNameId + index,
+      value: axis.name,
+    })),
+  ];
+
+  return { fvar: w.done(), names };
+}
+
+/** Zero-pads the writer until it reaches `target` bytes. */
+function padTo(w: { bytes: number[] }, target: number) {
+  while (w.bytes.length < target) w.bytes.push(0);
+}
+
 export function buildVariableFixture(): VariableFixture {
   // 16.16 fixed point, so a value of 400 is stored as 400 << 16.
   return buildFvar(VARIABLE_AXES, VARIABLE_INSTANCES, 256);

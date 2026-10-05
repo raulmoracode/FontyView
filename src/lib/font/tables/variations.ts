@@ -104,10 +104,17 @@ export function parseFvar(
     });
   }
 
+  // An instance record holds a subfamily name ID, flags, one coordinate per
+  // axis and a PostScript name ID. Real fonts disagree about `instanceSize`:
+  // STIX Two Text declares 8 and Skia declares 12, both fewer than the bytes
+  // their own records occupy. Stepping by the declared size would walk the
+  // table out of step, so the size the reader actually consumes is what
+  // advances, and reading stops rather than throwing when the table ends early.
+  const recordSize = 4 + axisCount * 4 + 2;
   const instances: NamedInstance[] = [];
+  let at = axesArrayOffset + axisCount * axisSize;
   for (let i = 0; i < instanceCount; i++) {
-    const at = axesArrayOffset + axisCount * axisSize + i * instanceSize;
-    if (at + 4 + axisCount * 4 > bytes.byteLength) break;
+    if (at + recordSize > bytes.byteLength) break;
     const instance = new BinaryReader(bytes).seek(at);
     const subfamilyNameId = instance.uint16();
     instance.uint16(); // flags
@@ -131,6 +138,7 @@ export function parseFvar(
       )?.value ?? null;
 
     instances.push({ name, coordinates, postScriptName });
+    at += recordSize;
   }
 
   return { axes, instances };

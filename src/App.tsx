@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { CharacterMap } from "@/components/font/character-map";
 import { ExportJsonCard } from "@/components/font/export-json-card";
 import { ExportReportCard } from "@/components/font/export-report-card";
@@ -380,18 +381,26 @@ function App() {
         onExport={() => setActive("export")}
         onLoadAnother={() => loadAnotherRef.current?.click()}
       >
-        {renderSection(
-          active,
-          loaded,
-          coverage,
-          glyphs,
-          scriptOf,
-          selectedGlyphId,
-          setSelectedGlyphId,
-          axisValues,
-          setAxisValues,
-          compared,
-        )}
+        <ErrorBoundary
+          label={SECTION_TITLES[active]}
+          // Switching section is what the person is most likely doing when a
+          // panel fails, so it also clears the error.
+          onReset={() => setActive(active)}
+          key={active}
+        >
+          {renderSection(
+            active,
+            loaded,
+            coverage,
+            glyphs,
+            scriptOf,
+            selectedGlyphId,
+            setSelectedGlyphId,
+            axisValues,
+            setAxisValues,
+            compared,
+          )}
+        </ErrorBoundary>
       </AppShell>
 
       <input
