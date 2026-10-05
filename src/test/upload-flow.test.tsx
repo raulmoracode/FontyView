@@ -185,3 +185,60 @@ describe("opentype tables", () => {
     expect(within(main).queryByText("OS/2")).toBeNull();
   });
 });
+
+describe("font metrics", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("shows vertical metrics from head, hhea and post", async () => {
+    render(<App />);
+    selectFile(fixtureFile());
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Font Metrics" }));
+    await waitFor(() => {
+      expect(screen.getByText("FONT METRICS")).toBeDefined();
+    });
+
+    const main = screen.getByRole("main");
+    const rowText = (label: string) =>
+      within(main).getByText(label).closest("tr")?.textContent ?? "";
+
+    // hhea
+    expect(rowText("Ascender")).toContain("800");
+    expect(rowText("Descender")).toContain("-200");
+    expect(rowText("Line gap")).toContain("90");
+    // post
+    expect(rowText("Underline position")).toContain("-100");
+    expect(rowText("Underline thickness")).toContain("50");
+  });
+
+  it("reports metrics the font lacks as not available", async () => {
+    render(<App />);
+    selectFile(fixtureFile());
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Font Metrics" }));
+    await waitFor(() => {
+      expect(screen.getByText("FONT METRICS")).toBeDefined();
+    });
+
+    const main = screen.getByRole("main");
+    const rowText = (label: string) =>
+      within(main).getByText(label).closest("tr")?.textContent ?? "";
+
+    // This fixture has no OS/2 table, so these must not be invented.
+    expect(rowText("Cap height")).toContain("Not available");
+    expect(rowText("x-height")).toContain("Not available");
+    expect(rowText("Windows ascent")).toContain("Not available");
+  });
+});

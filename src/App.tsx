@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { FontInformation } from "@/components/font/font-information";
+import { FontMetricsView } from "@/components/font/font-metrics";
 import { OpenTypeTables } from "@/components/font/opentype-tables";
 import { Overview } from "@/components/font/overview";
 import { AppShell } from "@/components/layout/app-shell";
@@ -50,6 +51,8 @@ function renderSection(
       return <FontInformation records={loaded.structure.names} />;
     case "tables":
       return <OpenTypeTables analysis={loaded.analysis} />;
+    case "metrics":
+      return <FontMetricsView structure={loaded.structure} />;
     default:
       return <Placeholder title={SECTION_TITLES[active]} />;
   }
