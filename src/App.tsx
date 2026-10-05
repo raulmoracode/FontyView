@@ -3,6 +3,7 @@ import { FontInformation } from "@/components/font/font-information";
 import { FontMetricsView } from "@/components/font/font-metrics";
 import { OpenTypeTables } from "@/components/font/opentype-tables";
 import { Overview } from "@/components/font/overview";
+import { Specimen } from "@/components/font/specimen";
 import { AppShell } from "@/components/layout/app-shell";
 import type { SectionId } from "@/components/layout/app-sidebar";
 import { AnalyzingScreen } from "@/components/upload/analyzing-screen";
@@ -53,6 +54,8 @@ function renderSection(
       return <OpenTypeTables analysis={loaded.analysis} />;
     case "metrics":
       return <FontMetricsView structure={loaded.structure} />;
+    case "specimen":
+      return <Specimen family={loaded.analysis.cssFamilyName} />;
     default:
       return <Placeholder title={SECTION_TITLES[active]} />;
   }
