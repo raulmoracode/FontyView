@@ -58,6 +58,7 @@ const CHARSETS: { id: string; label: string; lines: string[] }[] = [
 type SpecimenStyle = {
   fontSize: number;
   fontFeatureSettings: string;
+  fontVariationSettings: string;
   tracking: number;
   lineHeight: number;
   alignment: Alignment;
@@ -69,6 +70,7 @@ function useSpecimenStyle() {
   const [style, setStyle] = useState<SpecimenStyle>({
     fontSize: 48,
     fontFeatureSettings: "normal",
+    fontVariationSettings: "normal",
     tracking: 0,
     lineHeight: 1.2,
     alignment: "left",
@@ -106,6 +108,7 @@ function SpecimenText({
         color: style.color ?? "hsl(var(--foreground))",
         fontKerning: "normal",
         fontFeatureSettings: style.fontFeatureSettings,
+        fontVariationSettings: style.fontVariationSettings,
       }}
     >
       {lines.join("\n")}
@@ -116,9 +119,12 @@ function SpecimenText({
 export function Specimen({
   family,
   layout,
+  variationSettings,
 }: {
   family: string;
   layout: LayoutTable[];
+  /** Set by the variable font controls, so axis changes reach the specimen. */
+  variationSettings?: string;
 }) {
   const { style, update } = useSpecimenStyle();
   const [text, setText] = useState(DEFAULT_TEXT);
@@ -129,6 +135,7 @@ export function Specimen({
   const effectiveStyle: SpecimenStyle = {
     ...style,
     fontFeatureSettings: featureSettings,
+    fontVariationSettings: variationSettings ?? "normal",
   };
 
   const scale = useMemo(

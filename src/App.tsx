@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CharacterMap } from "@/components/font/character-map";
 import { FontInformation } from "@/components/font/font-information";
 import { FontMetricsView } from "@/components/font/font-metrics";
@@ -15,6 +15,7 @@ import { Overview } from "@/components/font/overview";
 import { Scripts } from "@/components/font/scripts";
 import { Specimen } from "@/components/font/specimen";
 import { UnicodeCoverage } from "@/components/font/unicode-coverage";
+import { VariableFontControls } from "@/components/font/variable-font-controls";
 import { AppShell } from "@/components/layout/app-shell";
 import type { SectionId } from "@/components/layout/app-sidebar";
 import { AnalyzingScreen } from "@/components/upload/analyzing-screen";
@@ -24,6 +25,7 @@ import { buildCoverage, type CoverageSummary } from "@/lib/font/coverage";
 import { createGlyphSource, readRawGlyph } from "@/lib/font/font-source";
 import { categoryOf } from "@/lib/font/glyph-query";
 import { buildGlyphList, type GlyphEntry } from "@/lib/font/glyphs";
+import { toVariationSettings } from "@/lib/font/tables/variations";
 import { CATEGORY_LABELS } from "@/lib/font/unicode-category";
 import { blockForCodepoint } from "@/lib/font/unicode-data";
 import { useFontStore } from "@/store/font-store";
@@ -101,6 +103,8 @@ function readRawGlyphFor(loaded: LoadedFontState, glyphId: number) {
   return readRawGlyph(source, glyphId);
 }
 
+type AxisValues = Record<string, number>;
+
 function renderSection(
   active: SectionId,
   loaded: LoadedFontState,
@@ -109,6 +113,8 @@ function renderSection(
   scriptOf: ScriptLookup,
   selectedGlyphId: number | null,
   onSelectGlyph: (glyphId: number) => void,
+  axisValues: AxisValues,
+  onAxisChange: (next: AxisValues) => void,
 ) {
   switch (active) {
     case "overview":
@@ -126,6 +132,19 @@ function renderSection(
         <Specimen
           family={loaded.analysis.cssFamilyName}
           layout={loaded.structure.layout}
+          variationSettings={toVariationSettings(
+            loaded.structure.variation.axes,
+            axisValues,
+          )}
+        />
+      );
+    case "variable":
+      return (
+        <VariableFontControls
+          variation={loaded.structure.variation}
+          family={loaded.analysis.cssFamilyName}
+          values={axisValues}
+          onChange={onAxisChange}
         />
       );
     case "features":
@@ -197,9 +216,16 @@ function App() {
   const loaded = useFontStore((state) => state.loaded);
   const [active, setActive] = useState<SectionId>("overview");
   const [selectedGlyphId, setSelectedGlyphId] = useState<number | null>(null);
+  const [axisValues, setAxisValues] = useState<AxisValues>({});
   const loadAnotherRef = useRef<HTMLInputElement>(null);
 
   useFontRegistration(status === "ready" ? loaded : null);
+
+  // A new font means a new set of axes, so any previous positions are dropped.
+  const analysedId = loaded?.analysis.id ?? null;
+  useEffect(() => {
+    setAxisValues({});
+  }, [analysedId]);
   // Coverage is derived once from the cmap and reused across sections.
   const coverage = useMemo(
     () => buildCoverage(loaded?.cmap.mapping ?? new Map()),
@@ -234,6 +260,7 @@ function App() {
     <>
       <AppShell
         analysis={loaded.analysis}
+        isVariable={loaded.structure.variation.isVariable}
         active={active}
         onSelect={setActive}
         onExport={() => setActive("export")}
@@ -247,6 +274,8 @@ function App() {
           scriptOf,
           selectedGlyphId,
           setSelectedGlyphId,
+          axisValues,
+          setAxisValues,
         )}
       </AppShell>
 
