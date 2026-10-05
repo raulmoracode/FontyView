@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { CharacterMap } from "@/components/font/character-map";
 import { FontInformation } from "@/components/font/font-information";
 import { FontMetricsView } from "@/components/font/font-metrics";
+import { GlyphGrid } from "@/components/font/glyph-grid";
 import { KerningViewer } from "@/components/font/kerning-viewer";
 import { OpenTypeFeatures } from "@/components/font/opentype-features";
 import { OpenTypeTables } from "@/components/font/opentype-tables";
@@ -15,6 +16,7 @@ import { AnalyzingScreen } from "@/components/upload/analyzing-screen";
 import { UploadScreen } from "@/components/upload/upload-screen";
 import { useFontRegistration } from "@/hooks/use-font-registration";
 import { buildCoverage, type CoverageSummary } from "@/lib/font/coverage";
+import { buildGlyphList, type GlyphEntry } from "@/lib/font/glyphs";
 import { useFontStore } from "@/store/font-store";
 
 function Placeholder({ title }: { title: string }) {
@@ -64,6 +66,7 @@ function renderSection(
   active: SectionId,
   loaded: LoadedFontState,
   coverage: CoverageSummary,
+  glyphs: GlyphEntry[],
 ) {
   switch (active) {
     case "overview":
@@ -83,6 +86,10 @@ function renderSection(
       );
     case "features":
       return <OpenTypeFeatures layout={loaded.structure.layout} />;
+    case "glyphs":
+      return (
+        <GlyphGrid glyphs={glyphs} family={loaded.analysis.cssFamilyName} />
+      );
     case "unicode":
       return <UnicodeCoverage coverage={coverage} />;
     case "scripts":
@@ -130,6 +137,11 @@ function App() {
     () => buildCoverage(loaded?.cmap.mapping ?? new Map()),
     [loaded],
   );
+  // One glyph list per analysis, shared by the grid and the detail panel.
+  const glyphs = useMemo(
+    () => (loaded ? buildGlyphList(loaded.structure, loaded.cmap.mapping) : []),
+    [loaded],
+  );
 
   if (status === "idle" || status === "error") {
     return <UploadScreen />;
@@ -148,7 +160,7 @@ function App() {
         onExport={() => setActive("export")}
         onLoadAnother={() => loadAnotherRef.current?.click()}
       >
-        {renderSection(active, loaded, coverage)}
+        {renderSection(active, loaded, coverage, glyphs)}
       </AppShell>
 
       <input
