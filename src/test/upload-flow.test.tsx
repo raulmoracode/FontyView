@@ -817,3 +817,63 @@ describe("scripts", () => {
     expect(row?.textContent).toContain("1.2%");
   });
 });
+
+describe("glyph grid", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("shows the real glyph count and every mapped character", async () => {
+    render(<App />);
+    selectFile(fixtureFile());
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Glyphs" }));
+    await waitFor(() => {
+      expect(screen.getByText("GLYPHS")).toBeDefined();
+    });
+
+    const main = screen.getByRole("main");
+    // The fixture declares five glyphs, including two unmapped ones.
+    expect(main.textContent).toContain("5 glyphs");
+
+    // The three mapped characters are reachable by their accessible name.
+    expect(
+      within(main).getByRole("button", { name: /Glyph 1, A/ }),
+    ).toBeDefined();
+    expect(
+      within(main).getByRole("button", { name: /Glyph 2, B/ }),
+    ).toBeDefined();
+    expect(
+      within(main).getByRole("button", { name: /Glyph 4, é/ }),
+    ).toBeDefined();
+
+    // Unmapped glyphs are shown by glyph ID rather than as a blank box.
+    expect(within(main).getByRole("button", { name: "Glyph 0" })).toBeDefined();
+    expect(within(main).getByRole("button", { name: "Glyph 3" })).toBeDefined();
+  });
+
+  it("renders cells with the analysed font", async () => {
+    render(<App />);
+    selectFile(fixtureFile());
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Glyphs" }));
+    await waitFor(() => {
+      expect(screen.getByText("GLYPHS")).toBeDefined();
+    });
+
+    const family = useFontStore.getState().loaded?.analysis.cssFamilyName;
+    const cell = screen.getByRole("button", { name: /Glyph 1, A/ });
+    const glyphFace = cell.querySelector<HTMLElement>("[style*='font-family']");
+    expect(glyphFace?.style.fontFamily).toContain(family as string);
+  });
+});
