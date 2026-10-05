@@ -1389,7 +1389,11 @@ describe("JSON export", () => {
     await waitFor(() => {
       expect(screen.getByText("EXPORT")).toBeDefined();
     });
-    return screen.getByRole("main");
+    // The report card below repeats most of these labels, so queries stay
+    // inside the JSON card.
+    return within(screen.getByRole("main")).getByRole("region", {
+      name: "JSON export",
+    });
   }
 
   const ALL_SECTIONS = [
@@ -1478,5 +1482,104 @@ describe("JSON export", () => {
     ).toHaveProperty("disabled", true);
     fireEvent.click(within(main).getByRole("button", { name: "Download" }));
     expect(createObjectURL).not.toHaveBeenCalled();
+  });
+});
+
+describe("printable report", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+    vi.spyOn(window, "print").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  async function openReport(
+    font = new File(
+      [buildTrueTypeFont({ gsub: true, kern: true, variable: true })],
+      "Fixture.ttf",
+    ),
+  ) {
+    render(<App />);
+    selectFile(font);
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Export Report" }));
+    await waitFor(() => {
+      expect(screen.getByText("EXPORT")).toBeDefined();
+    });
+    return within(screen.getByRole("main")).getByRole("region", {
+      name: "Printable report",
+    });
+  }
+
+  it("titles the report with the font's own name", async () => {
+    const report = await openReport();
+
+    expect(report.textContent).toContain("Fixture");
+    expect(report.textContent).toContain("TrueType");
+  });
+
+  it("prints on demand", async () => {
+    const report = await openReport();
+
+    fireEvent.click(
+      within(report).getByRole("button", { name: /Print or save as PDF/ }),
+    );
+    expect(window.print).toHaveBeenCalled();
+  });
+
+  it("keeps only the sections that were asked for", async () => {
+    const report = await openReport();
+
+    expect(report.textContent).toContain("Tables");
+    expect(report.textContent).toContain("Metrics");
+
+    fireEvent.click(within(report).getByLabelText("Tables"));
+    expect(report.textContent).not.toContain("glyf");
+  });
+
+  it("lists the real ligatures and axes", async () => {
+    const report = await openReport();
+
+    fireEvent.click(within(report).getByLabelText("Ligatures"));
+    expect(report.textContent).toContain("+");
+    expect(report.textContent).toContain("wght");
+  });
+
+  it("says what is absent rather than leaving a gap", async () => {
+    const report = await openReport(
+      new File([buildTrueTypeFont()], "Plain.ttf"),
+    );
+
+    // Ligatures are off by default; variable axes are already on, and the
+    // plain fixture has none.
+    fireEvent.click(within(report).getByLabelText("Ligatures"));
+    expect(report.textContent).toContain("no GSUB table");
+    expect(report.textContent).toContain("no variation axes");
+    // A missing metric is shown as a dash rather than a blank line.
+    expect(report.textContent).toContain("Cap height—");
+  });
+
+  it("shows a specimen of the encoded characters", async () => {
+    const report = await openReport();
+
+    fireEvent.click(within(report).getByLabelText("Glyph inventory"));
+    expect(report.textContent).toContain("encoded characters");
+    // The fixture encodes A, B and e-acute.
+    expect(report.textContent).toContain("U+0041");
+    expect(report.textContent).toContain("U+00E9");
+  });
+
+  it("marks the chrome as hidden when printing", async () => {
+    const report = await openReport();
+
+    // The controls and the JSON preview must not reach the paper.
+    expect(report.querySelector("[data-print-hide]")).not.toBeNull();
+    expect(
+      report.querySelectorAll("[data-print-section]").length,
+    ).toBeGreaterThan(0);
   });
 });

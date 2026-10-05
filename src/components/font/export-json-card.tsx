@@ -73,60 +73,62 @@ export function ExportJsonCard({
   };
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
-        <CardTitle>JSON</CardTitle>
-        <Button onClick={download} disabled={sections.length === 0}>
-          <Download aria-hidden="true" />
-          Download
-        </Button>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-6">
-        <p className="text-sm text-muted-foreground">
-          The analysis as JSON, for scripts and pipelines. The font's own bytes
-          are left out: everything exported here was read out of them.
-        </p>
+    <section aria-label="JSON export">
+      <Card>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+          <CardTitle>JSON</CardTitle>
+          <Button onClick={download} disabled={sections.length === 0}>
+            <Download aria-hidden="true" />
+            Download
+          </Button>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-6">
+          <p className="text-sm text-muted-foreground">
+            The analysis as JSON, for scripts and pipelines. The font's own
+            bytes are left out: everything exported here was read out of them.
+          </p>
 
-        <div className="flex flex-wrap gap-x-6 gap-y-3">
-          {EXPORT_SECTIONS.map((section) => (
-            <div key={section} className="flex items-center gap-2">
-              <Switch
-                id={`export-${section}`}
-                checked={sections.includes(section)}
-                onCheckedChange={() => toggle(section)}
-              />
-              <Label htmlFor={`export-${section}`} className="font-normal">
-                {SECTION_LABELS[section]}
-              </Label>
-            </div>
-          ))}
-        </div>
+          <div className="flex flex-wrap gap-x-6 gap-y-3">
+            {EXPORT_SECTIONS.map((section) => (
+              <div key={section} className="flex items-center gap-2">
+                <Switch
+                  id={`export-${section}`}
+                  checked={sections.includes(section)}
+                  onCheckedChange={() => toggle(section)}
+                />
+                <Label htmlFor={`export-${section}`} className="font-normal">
+                  {SECTION_LABELS[section]}
+                </Label>
+              </div>
+            ))}
+          </div>
 
-        <div className="flex items-center gap-2">
-          <Switch
-            id="export-pretty"
-            checked={pretty}
-            onCheckedChange={(value) => setPretty(value)}
-          />
-          <Label htmlFor="export-pretty" className="font-normal">
-            Pretty print
-          </Label>
-        </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="export-pretty"
+              checked={pretty}
+              onCheckedChange={(value) => setPretty(value)}
+            />
+            <Label htmlFor="export-pretty" className="font-normal">
+              Pretty print
+            </Label>
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary">{fileName}</Badge>
-          <Badge variant="outline">{formatBytes(size)}</Badge>
-          <Badge variant="outline">
-            {formatNumber(sections.length)} of{" "}
-            {formatNumber(EXPORT_SECTIONS.length)} sections
-          </Badge>
-        </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">{fileName}</Badge>
+            <Badge variant="outline">{formatBytes(size)}</Badge>
+            <Badge variant="outline">
+              {formatNumber(sections.length)} of{" "}
+              {formatNumber(EXPORT_SECTIONS.length)} sections
+            </Badge>
+          </div>
 
-        <pre className="max-h-96 overflow-auto rounded-md bg-muted/40 p-4 font-mono text-xs">
-          {text.slice(0, 4000)}
-          {text.length > 4000 ? "\n…" : ""}
-        </pre>
-      </CardContent>
-    </Card>
+          <pre className="max-h-96 overflow-auto rounded-md bg-muted/40 p-4 font-mono text-xs">
+            {text.slice(0, 4000)}
+            {text.length > 4000 ? "\n…" : ""}
+          </pre>
+        </CardContent>
+      </Card>
+    </section>
   );
 }

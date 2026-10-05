@@ -89,14 +89,11 @@ describe("JSON export", () => {
     const second = buildExport(loaded, ["ligatures"]);
 
     // Only the timestamp may differ between two builds.
-    delete first.exportedAt;
-    delete second.exportedAt;
-    expect(first).toEqual(second);
+    expect({ ...first, exportedAt: "" }).toEqual({ ...second, exportedAt: "" });
 
-    const items = first.ligatures?.items as {
-      glyph: number;
-      components: number[];
-    }[];
+    const items = (
+      first.ligatures as { items: { glyph: number; components: number[] }[] }
+    ).items;
     expect(items.length).toBe(6);
     expect(items[0]).toEqual({ glyph: 3, components: [1, 2], lookup: 0 });
   });
