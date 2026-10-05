@@ -152,3 +152,36 @@ describe("font information", () => {
     expect(rowText("Trademark")).toContain("Not available");
   });
 });
+
+describe("opentype tables", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("lists only the tables the font actually contains", async () => {
+    render(<App />);
+    selectFile(fixtureFile());
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "OpenType Tables" }));
+    await waitFor(() => {
+      expect(screen.getByText("OPENTYPE TABLES")).toBeDefined();
+    });
+
+    const main = screen.getByRole("main");
+    expect(within(main).getByText("glyf").closest("tr")?.textContent).toContain(
+      "Glyph outlines",
+    );
+    expect(within(main).getByText("9 tables")).toBeDefined();
+
+    // This fixture has no layout or colour tables, so none may be listed.
+    expect(within(main).queryByText("GSUB")).toBeNull();
+    expect(within(main).queryByText("OS/2")).toBeNull();
+  });
+});
