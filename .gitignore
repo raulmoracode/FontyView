@@ -26,3 +26,12 @@ dist-ssr
 .env.*
 .next
 coverage
+
+# Font files are user input and must never be committed. Test fixtures are
+# generated in memory instead (see src/test/fixtures).
+*.ttf
+*.otf
+*.ttc
+*.woff
+*.woff2
+*.eot
