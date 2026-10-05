@@ -526,3 +526,94 @@ describe("specimen feature toggles", () => {
     }
   });
 });
+
+describe("kerning", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  async function openKerning(font: File) {
+    render(<App />);
+    selectFile(font);
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Kerning" }));
+    await waitFor(() => {
+      expect(screen.getByText("KERNING")).toBeDefined();
+    });
+    return screen.getByRole("main");
+  }
+
+  it("says plainly when a font has no kerning data", async () => {
+    const main = await openKerning(fixtureFile());
+    expect(main.textContent).toContain(
+      "This font contains no kerning data. There is no legacy kern table and no GPOS pair positioning, so no pair is adjusted.",
+    );
+  });
+
+  it("reads the pairs out of a legacy kern table", async () => {
+    const main = await openKerning(
+      new File([buildTrueTypeFont({ kern: true })], "Kerned.ttf"),
+    );
+
+    // Three pairs were written into the fixture.
+    expect(main.textContent).toContain("kern · 3 pairs");
+    expect(main.textContent).toContain("3 distinct pairs");
+
+    // The real values, with the glyphs they came from.
+    expect(within(main).getByText("-60").closest("tr")?.textContent).toContain(
+      "1 → 2",
+    );
+    expect(within(main).getByText("-20").closest("tr")?.textContent).toContain(
+      "1 → 4",
+    );
+    expect(within(main).getByText("-55").closest("tr")?.textContent).toContain(
+      "2 → 1",
+    );
+  });
+
+  it("looks up a custom pair and reports when none is defined", async () => {
+    const main = await openKerning(
+      new File([buildTrueTypeFont({ kern: true })], "Kerned.ttf"),
+    );
+
+    const field = within(main).getByLabelText("Enter pair");
+
+    // A and B are glyphs 1 and 2, and the fixture kerns that pair to -60.
+    fireEvent.change(field, { target: { value: "AB" } });
+    expect(main.textContent).toContain("-60 units");
+    expect(main.textContent).toContain("glyphs 1 → 2");
+
+    // B followed by A is also defined.
+    fireEvent.change(field, { target: { value: "BA" } });
+    expect(main.textContent).toContain("-55 units");
+
+    // A and e-acute is the third pair in the fixture.
+    fireEvent.change(field, { target: { value: "Aé" } });
+    expect(main.textContent).toContain("-20 units");
+  });
+
+  it("does not invent a value for a pair the font does not kern", async () => {
+    const main = await openKerning(
+      new File([buildTrueTypeFont({ kern: true })], "Kerned.ttf"),
+    );
+
+    const field = within(main).getByLabelText("Enter pair");
+
+    // Both characters exist in the font, but the pair is not kerned.
+    fireEvent.change(field, { target: { value: "éB" } });
+    expect(main.textContent).toContain("No kerning pair defined");
+    expect(main.textContent).toContain("No adjustment");
+
+    // A pair the font has no characters for is reported as such.
+    fireEvent.change(field, { target: { value: "éW" } });
+    expect(main.textContent).toContain(
+      "One of these characters is not in the font.",
+    );
+  });
+});

@@ -28,6 +28,7 @@ import {
   parseRawGlyph,
   type RawGlyph,
 } from "./tables/glyf";
+import { type KerningData, readKerning } from "./tables/kerning";
 import { type LayoutTable, parseLayoutTable } from "./tables/layout";
 import { type GlyphMetric, parseHmtx, parsePost } from "./tables/metrics";
 import { decodeWoff2 } from "./woff2";
@@ -140,6 +141,7 @@ export type FontStructure = {
   loca: Uint32Array | null;
   /** Present only when the font has a GSUB or GPOS table. */
   layout: LayoutTable[];
+  kerning: KerningData;
   tableSizes: { tag: string; length: number }[];
 };
 
@@ -189,6 +191,13 @@ export function readFontStructure(font: UnpackedFont): FontStructure {
       ? parseLoca(locaBytes, head.indexToLocFormat, numGlyphs)
       : null;
 
+  const kernTable = tableBytes(bytes, directory, "kern");
+  const gposTable = tableBytes(bytes, directory, "GPOS");
+  const kerning = readKerning(
+    kernTable,
+    gposTable ? { gpos: gposTable, lookupListOffset: 0 } : null,
+  );
+
   return {
     directory,
     head,
@@ -201,6 +210,7 @@ export function readFontStructure(font: UnpackedFont): FontStructure {
     metrics,
     loca,
     layout,
+    kerning,
     tableSizes,
   };
 }

@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { FontInformation } from "@/components/font/font-information";
 import { FontMetricsView } from "@/components/font/font-metrics";
+import { KerningViewer } from "@/components/font/kerning-viewer";
 import { OpenTypeFeatures } from "@/components/font/opentype-features";
 import { OpenTypeTables } from "@/components/font/opentype-tables";
 import { Overview } from "@/components/font/overview";
@@ -42,6 +43,15 @@ const SECTION_TITLES: Record<SectionId, string> = {
   export: "Export Report",
 };
 
+/** Inverts the cmap so a glyph ID can be shown as the character it encodes. */
+function glyphToCodepoint(mapping: Map<number, number>): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const [codepoint, glyphId] of mapping) {
+    if (!out.has(glyphId)) out.set(glyphId, codepoint);
+  }
+  return out;
+}
+
 function renderSection(
   active: SectionId,
   loaded: NonNullable<ReturnType<typeof useFontStore.getState>["loaded"]>,
@@ -64,6 +74,25 @@ function renderSection(
       );
     case "features":
       return <OpenTypeFeatures layout={loaded.structure.layout} />;
+    case "kerning":
+      return (
+        <KerningViewer
+          kerning={loaded.structure.kerning}
+          family={loaded.analysis.cssFamilyName}
+          codepointToGlyph={loaded.cmap.mapping}
+          glyphToCodepoint={glyphToCodepoint(loaded.cmap.mapping)}
+          glyphNames={
+            loaded.structure.post?.glyphNames
+              ? new Map(
+                  loaded.structure.post.glyphNames.map((name, index) => [
+                    index,
+                    name,
+                  ]),
+                )
+              : new Map()
+          }
+        />
+      );
     default:
       return <Placeholder title={SECTION_TITLES[active]} />;
   }
