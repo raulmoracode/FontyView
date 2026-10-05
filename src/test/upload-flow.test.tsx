@@ -757,3 +757,63 @@ describe("character map", () => {
     expect(main.textContent).toContain("2 characters");
   });
 });
+
+describe("scripts", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  async function openScripts() {
+    render(<App />);
+    selectFile(fixtureFile());
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Scripts" }));
+    await waitFor(() => {
+      expect(screen.getByText("SCRIPTS")).toBeDefined();
+    });
+    return screen.getByRole("main");
+  }
+
+  it("marks only scripts the font really has characters for", async () => {
+    const main = await openScripts();
+
+    // The fixture's A, B and e-acute are all Latin.
+    expect(main.textContent).toContain("1 of 31 supported");
+
+    const latin = within(main).getAllByText("Latin")[0]?.closest("li");
+    expect(latin?.textContent).toContain("3 characters");
+    expect(latin?.textContent).toContain("Basic Latin");
+    expect(latin?.textContent).toContain("Latin-1 Supplement");
+
+    // Everything else is explicitly listed as not supported.
+    const notSupported = main.textContent?.split("Not supported")[1] ?? "";
+    for (const absent of [
+      "Greek",
+      "Cyrillic",
+      "Arabic",
+      "Hebrew",
+      "Hiragana",
+      "Han",
+    ]) {
+      expect(notSupported).toContain(absent);
+    }
+    // And a supported script does not appear in that list.
+    expect(notSupported.split("Coverage per script")[0]).not.toContain("Latin");
+  });
+
+  it("reports coverage per script from the font's own blocks", async () => {
+    const main = await openScripts();
+
+    // Latin spans Basic Latin and Latin-1 Supplement: 3 of 256 code points.
+    const row = within(main).getByText("3 / 256").closest("tr");
+    expect(row?.textContent).toContain("Latin");
+    // 3 of 256 is 1.2%
+    expect(row?.textContent).toContain("1.2%");
+  });
+});
