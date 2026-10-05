@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { CharacterMap } from "@/components/font/character-map";
 import { FontInformation } from "@/components/font/font-information";
 import { FontMetricsView } from "@/components/font/font-metrics";
-import { GlyphGrid } from "@/components/font/glyph-grid";
+import { GlyphBrowser } from "@/components/font/glyph-browser";
 import { KerningViewer } from "@/components/font/kerning-viewer";
 import { OpenTypeFeatures } from "@/components/font/opentype-features";
 import { OpenTypeTables } from "@/components/font/opentype-tables";
@@ -17,6 +17,7 @@ import { UploadScreen } from "@/components/upload/upload-screen";
 import { useFontRegistration } from "@/hooks/use-font-registration";
 import { buildCoverage, type CoverageSummary } from "@/lib/font/coverage";
 import { buildGlyphList, type GlyphEntry } from "@/lib/font/glyphs";
+import { blockForCodepoint } from "@/lib/font/unicode-data";
 import { useFontStore } from "@/store/font-store";
 
 function Placeholder({ title }: { title: string }) {
@@ -62,11 +63,14 @@ type LoadedFontState = NonNullable<
   ReturnType<typeof useFontStore.getState>["loaded"]
 >;
 
+type ScriptLookup = (glyph: GlyphEntry) => string | undefined;
+
 function renderSection(
   active: SectionId,
   loaded: LoadedFontState,
   coverage: CoverageSummary,
   glyphs: GlyphEntry[],
+  scriptOf: ScriptLookup,
 ) {
   switch (active) {
     case "overview":
@@ -88,7 +92,11 @@ function renderSection(
       return <OpenTypeFeatures layout={loaded.structure.layout} />;
     case "glyphs":
       return (
-        <GlyphGrid glyphs={glyphs} family={loaded.analysis.cssFamilyName} />
+        <GlyphBrowser
+          glyphs={glyphs}
+          family={loaded.analysis.cssFamilyName}
+          scriptOf={scriptOf}
+        />
       );
     case "unicode":
       return <UnicodeCoverage coverage={coverage} />;
@@ -142,6 +150,17 @@ function App() {
     () => (loaded ? buildGlyphList(loaded.structure, loaded.cmap.mapping) : []),
     [loaded],
   );
+  const scriptOf = useMemo(() => {
+    const cache = new Map<number, string | undefined>();
+    return (glyph: GlyphEntry) => {
+      if (glyph.codepoint === null) return undefined;
+      const cached = cache.get(glyph.codepoint);
+      if (cached !== undefined || cache.has(glyph.codepoint)) return cached;
+      const script = blockForCodepoint(glyph.codepoint)?.script;
+      cache.set(glyph.codepoint, script);
+      return script;
+    };
+  }, []);
 
   if (status === "idle" || status === "error") {
     return <UploadScreen />;
@@ -160,7 +179,7 @@ function App() {
         onExport={() => setActive("export")}
         onLoadAnother={() => loadAnotherRef.current?.click()}
       >
-        {renderSection(active, loaded, coverage, glyphs)}
+        {renderSection(active, loaded, coverage, glyphs, scriptOf)}
       </AppShell>
 
       <input
