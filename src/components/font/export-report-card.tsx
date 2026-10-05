@@ -56,12 +56,20 @@ function Section({
   );
 }
 
-function Facts({ facts }: { facts: [string, string | number | null][] }) {
+/**
+ * A label and value pair. The optional third element is the React key, needed
+ * when a label can repeat: two lookups can hold the same ligature sequence.
+ */
+type Fact =
+  | [string, string | number | null]
+  | [string, string | number | null, string];
+
+function Facts({ facts }: { facts: Fact[] }) {
   return (
     <dl className="grid gap-x-8 gap-y-1 text-sm sm:grid-cols-2">
-      {facts.map(([label, value]) => (
+      {facts.map(([label, value, key]) => (
         <div
-          key={label}
+          key={key ?? label}
           className="flex justify-between gap-4 border-b border-border-subtle py-1"
         >
           <dt className="text-muted-foreground">{label}</dt>
@@ -198,10 +206,13 @@ export function ExportReportCard({
               facts={structure.names
                 .filter((record) => record.value.length > 0)
                 .slice(0, 24)
-                .map((record): [string, string] => [
-                  `${record.label} · ${record.platform}`,
-                  record.value,
-                ])}
+                .map(
+                  (record): Fact => [
+                    `${record.label} · ${record.platform}`,
+                    record.value,
+                    `${record.nameId}-${record.platformId}-${record.languageId}`,
+                  ],
+                )}
             />
           </Section>
         ) : null}
@@ -295,7 +306,7 @@ export function ExportReportCard({
                 facts={[
                   ["Distinct pairs", structure.kerning.pairs.size],
                   ...structure.kerning.sources.map(
-                    (source): [string, number] => [
+                    (source): Fact => [
                       `${source} pairs`,
                       structure.kerning.counts[source],
                     ],
@@ -318,16 +329,22 @@ export function ExportReportCard({
               </p>
             ) : (
               <Facts
-                facts={gsub.ligatures.map((ligature): [string, number] => [
-                  ligature.components
-                    .map(
-                      (glyphId) =>
-                        printedGlyphs.find((glyph) => glyph.glyphId === glyphId)
-                          ?.char ?? `gid ${glyphId}`,
-                    )
-                    .join(" + "),
-                  ligature.glyphId,
-                ])}
+                facts={gsub.ligatures.map(
+                  (ligature): Fact => [
+                    ligature.components
+                      .map(
+                        (glyphId) =>
+                          printedGlyphs.find(
+                            (glyph) => glyph.glyphId === glyphId,
+                          )?.char ?? `gid ${glyphId}`,
+                      )
+                      .join(" + "),
+                    ligature.glyphId,
+                    // Two lookups can hold the same sequence, so the lookup has
+                    // to be part of the key.
+                    `${ligature.lookupIndex}-${ligature.glyphId}-${ligature.components.join("-")}`,
+                  ],
+                )}
               />
             )}
           </Section>
@@ -342,10 +359,12 @@ export function ExportReportCard({
             ) : (
               <Facts
                 facts={[
-                  ...structure.variation.axes.map((axis): [string, string] => [
-                    `${axis.tag} · ${axis.name}`,
-                    `${axis.minimum} – ${axis.default} – ${axis.maximum}`,
-                  ]),
+                  ...structure.variation.axes.map(
+                    (axis): Fact => [
+                      `${axis.tag} · ${axis.name}`,
+                      `${axis.minimum} – ${axis.default} – ${axis.maximum}`,
+                    ],
+                  ),
                   ["Named instances", structure.variation.instances.length],
                 ]}
               />
