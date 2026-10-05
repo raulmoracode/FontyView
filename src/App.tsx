@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { FontInformation } from "@/components/font/font-information";
 import { FontMetricsView } from "@/components/font/font-metrics";
 import { KerningViewer } from "@/components/font/kerning-viewer";
@@ -6,11 +6,13 @@ import { OpenTypeFeatures } from "@/components/font/opentype-features";
 import { OpenTypeTables } from "@/components/font/opentype-tables";
 import { Overview } from "@/components/font/overview";
 import { Specimen } from "@/components/font/specimen";
+import { UnicodeCoverage } from "@/components/font/unicode-coverage";
 import { AppShell } from "@/components/layout/app-shell";
 import type { SectionId } from "@/components/layout/app-sidebar";
 import { AnalyzingScreen } from "@/components/upload/analyzing-screen";
 import { UploadScreen } from "@/components/upload/upload-screen";
 import { useFontRegistration } from "@/hooks/use-font-registration";
+import { buildCoverage, type CoverageSummary } from "@/lib/font/coverage";
 import { useFontStore } from "@/store/font-store";
 
 function Placeholder({ title }: { title: string }) {
@@ -52,9 +54,14 @@ function glyphToCodepoint(mapping: Map<number, number>): Map<number, number> {
   return out;
 }
 
+type LoadedFontState = NonNullable<
+  ReturnType<typeof useFontStore.getState>["loaded"]
+>;
+
 function renderSection(
   active: SectionId,
-  loaded: NonNullable<ReturnType<typeof useFontStore.getState>["loaded"]>,
+  loaded: LoadedFontState,
+  coverage: CoverageSummary,
 ) {
   switch (active) {
     case "overview":
@@ -74,6 +81,8 @@ function renderSection(
       );
     case "features":
       return <OpenTypeFeatures layout={loaded.structure.layout} />;
+    case "unicode":
+      return <UnicodeCoverage coverage={coverage} />;
     case "kerning":
       return (
         <KerningViewer
@@ -105,6 +114,11 @@ function App() {
   const loadAnotherRef = useRef<HTMLInputElement>(null);
 
   useFontRegistration(status === "ready" ? loaded : null);
+  // Coverage is derived once from the cmap and reused across sections.
+  const coverage = useMemo(
+    () => buildCoverage(loaded?.cmap.mapping ?? new Map()),
+    [loaded],
+  );
 
   if (status === "idle" || status === "error") {
     return <UploadScreen />;
@@ -123,7 +137,7 @@ function App() {
         onExport={() => setActive("export")}
         onLoadAnother={() => loadAnotherRef.current?.click()}
       >
-        {renderSection(active, loaded)}
+        {renderSection(active, loaded, coverage)}
       </AppShell>
 
       <input
