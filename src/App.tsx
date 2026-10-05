@@ -3,6 +3,11 @@ import { CharacterMap } from "@/components/font/character-map";
 import { FontInformation } from "@/components/font/font-information";
 import { FontMetricsView } from "@/components/font/font-metrics";
 import { GlyphBrowser } from "@/components/font/glyph-browser";
+import {
+  type GlyphDetail,
+  GlyphDetailPanel,
+} from "@/components/font/glyph-detail-panel";
+import { GlyphMetricsView } from "@/components/font/glyph-metrics-view";
 import { KerningViewer } from "@/components/font/kerning-viewer";
 import { OpenTypeFeatures } from "@/components/font/opentype-features";
 import { OpenTypeTables } from "@/components/font/opentype-tables";
@@ -16,7 +21,10 @@ import { AnalyzingScreen } from "@/components/upload/analyzing-screen";
 import { UploadScreen } from "@/components/upload/upload-screen";
 import { useFontRegistration } from "@/hooks/use-font-registration";
 import { buildCoverage, type CoverageSummary } from "@/lib/font/coverage";
+import { createGlyphSource, readRawGlyph } from "@/lib/font/font-source";
+import { categoryOf } from "@/lib/font/glyph-query";
 import { buildGlyphList, type GlyphEntry } from "@/lib/font/glyphs";
+import { CATEGORY_LABELS } from "@/lib/font/unicode-category";
 import { blockForCodepoint } from "@/lib/font/unicode-data";
 import { useFontStore } from "@/store/font-store";
 
@@ -65,12 +73,42 @@ type LoadedFontState = NonNullable<
 
 type ScriptLookup = (glyph: GlyphEntry) => string | undefined;
 
+/** Builds the detail panel input for a glyph, or a placeholder when none is selected. */
+function buildDetail(
+  loaded: LoadedFontState,
+  glyph: GlyphEntry | null,
+): GlyphDetail {
+  const unitsPerEm = loaded.structure.head?.unitsPerEm ?? null;
+  const raw = glyph ? readRawGlyphFor(loaded, glyph.glyphId) : null;
+  return {
+    glyphId: glyph?.glyphId ?? 0,
+    name: glyph?.name ?? null,
+    raw,
+    advanceWidth: glyph?.advanceWidth ?? null,
+    leftSideBearing: glyph?.leftSideBearing ?? null,
+    xMin: raw ? raw.xMin : null,
+    yMin: raw ? raw.yMin : null,
+    xMax: raw ? raw.xMax : null,
+    yMax: raw ? raw.yMax : null,
+    unitsPerEm,
+  };
+}
+
+/** Raw `glyf` data is only available for TrueType-outline fonts. */
+function readRawGlyphFor(loaded: LoadedFontState, glyphId: number) {
+  if (loaded.structure.loca === null) return null;
+  const source = createGlyphSource(loaded.structure, loaded.font);
+  return readRawGlyph(source, glyphId);
+}
+
 function renderSection(
   active: SectionId,
   loaded: LoadedFontState,
   coverage: CoverageSummary,
   glyphs: GlyphEntry[],
   scriptOf: ScriptLookup,
+  selectedGlyphId: number | null,
+  onSelectGlyph: (glyphId: number) => void,
 ) {
   switch (active) {
     case "overview":
@@ -81,6 +119,8 @@ function renderSection(
       return <OpenTypeTables analysis={loaded.analysis} />;
     case "metrics":
       return <FontMetricsView structure={loaded.structure} />;
+    case "glyph-metrics":
+      return <GlyphMetricsView glyphs={glyphs} />;
     case "specimen":
       return (
         <Specimen
@@ -90,14 +130,33 @@ function renderSection(
       );
     case "features":
       return <OpenTypeFeatures layout={loaded.structure.layout} />;
-    case "glyphs":
+    case "glyphs": {
+      const selected = glyphs.find(
+        (glyph) => glyph.glyphId === selectedGlyphId,
+      );
       return (
         <GlyphBrowser
           glyphs={glyphs}
           family={loaded.analysis.cssFamilyName}
           scriptOf={scriptOf}
+          selectedGlyphId={selectedGlyphId}
+          onSelect={(glyph) => onSelectGlyph(glyph.glyphId)}
+          detail={
+            <GlyphDetailPanel
+              detail={buildDetail(loaded, selected ?? null)}
+              family={loaded.analysis.cssFamilyName}
+              char={selected?.char ?? null}
+              codepoints={selected?.codepoints ?? []}
+              category={
+                selected
+                  ? CATEGORY_LABELS[categoryOf(selected)]
+                  : CATEGORY_LABELS.unassigned
+              }
+            />
+          }
         />
       );
+    }
     case "unicode":
       return <UnicodeCoverage coverage={coverage} />;
     case "scripts":
@@ -137,6 +196,7 @@ function App() {
   const status = useFontStore((state) => state.status);
   const loaded = useFontStore((state) => state.loaded);
   const [active, setActive] = useState<SectionId>("overview");
+  const [selectedGlyphId, setSelectedGlyphId] = useState<number | null>(null);
   const loadAnotherRef = useRef<HTMLInputElement>(null);
 
   useFontRegistration(status === "ready" ? loaded : null);
@@ -179,7 +239,15 @@ function App() {
         onExport={() => setActive("export")}
         onLoadAnother={() => loadAnotherRef.current?.click()}
       >
-        {renderSection(active, loaded, coverage, glyphs, scriptOf)}
+        {renderSection(
+          active,
+          loaded,
+          coverage,
+          glyphs,
+          scriptOf,
+          selectedGlyphId,
+          setSelectedGlyphId,
+        )}
       </AppShell>
 
       <input
