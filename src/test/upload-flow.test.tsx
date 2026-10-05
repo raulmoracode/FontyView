@@ -617,3 +617,70 @@ describe("kerning", () => {
     );
   });
 });
+
+describe("unicode coverage", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  async function openCoverage() {
+    render(<App />);
+    selectFile(fixtureFile());
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Unicode Coverage" }));
+    await waitFor(() => {
+      expect(screen.getByText("UNICODE COVERAGE")).toBeDefined();
+    });
+    return screen.getByRole("main");
+  }
+
+  it("counts only the blocks the font actually covers", async () => {
+    const main = await openCoverage();
+
+    // The fixture maps A, B and e-acute, so only Basic Latin and
+    // Latin-1 Supplement may appear.
+    expect(main.textContent).toContain("3 code points");
+    expect(main.textContent).toContain("2 blocks");
+
+    const basicLatin = within(main)
+      .getByText("Basic Latin")
+      .closest("tr")?.textContent;
+    expect(basicLatin).toContain("2 / 128");
+    // 2 of 128 is 1.6%
+    expect(basicLatin).toContain("1.6%");
+
+    const latin1 = within(main)
+      .getByText("Latin-1 Supplement")
+      .closest("tr")?.textContent;
+    expect(latin1).toContain("1 / 128");
+  });
+
+  it("does not list blocks the font has no characters in", async () => {
+    const main = await openCoverage();
+
+    for (const absent of ["Greek and Coptic", "Cyrillic", "Arabic", "Hebrew"]) {
+      expect(within(main).queryByText(absent)).toBeNull();
+    }
+  });
+
+  it("filters the block list", async () => {
+    const main = await openCoverage();
+
+    fireEvent.change(within(main).getByLabelText("Filter blocks"), {
+      target: { value: "latin-1" },
+    });
+    expect(within(main).getByText("Latin-1 Supplement")).toBeDefined();
+    expect(within(main).queryByText("Basic Latin")).toBeNull();
+
+    fireEvent.change(within(main).getByLabelText("Filter blocks"), {
+      target: { value: "greek" },
+    });
+    expect(main.textContent).toContain("No block matches that filter.");
+  });
+});
