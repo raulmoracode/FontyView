@@ -448,3 +448,81 @@ describe("opentype features", () => {
     }
   });
 });
+
+describe("specimen feature toggles", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  async function openSpecimen(font: File) {
+    render(<App />);
+    selectFile(font);
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Specimen" }));
+    await waitFor(() => {
+      expect(screen.getByText("SPECIMEN")).toBeDefined();
+    });
+    return screen.getByRole("main");
+  }
+
+  it("says there is nothing to toggle without layout tables", async () => {
+    const main = await openSpecimen(fixtureFile());
+    expect(main.textContent).toContain(
+      "This font has no GSUB or GPOS table, so there are no features to switch on or off.",
+    );
+  });
+
+  it("offers a switch per detected feature and applies it to the specimen", async () => {
+    const main = await openSpecimen(
+      new File([buildTrueTypeFont({ gsub: true })], "Layout.ttf"),
+    );
+
+    // Exactly the three features the fixture declares.
+    const liga = within(main).getByRole("switch", { name: /liga/ });
+    const kern = within(main).getByRole("switch", { name: /kern/ });
+    const ss01 = within(main).getByRole("switch", { name: /ss01/ });
+    expect(liga).toBeDefined();
+    expect(kern).toBeDefined();
+    expect(ss01).toBeDefined();
+    expect(within(main).queryByRole("switch", { name: /smcp/ })).toBeNull();
+
+    const specimen = within(main).getByText(/quick brown fox/);
+    // Nothing enabled yet, so the specimen is left on the font's defaults.
+    expect(specimen.style.fontFeatureSettings).toBe("normal");
+
+    fireEvent.click(liga);
+    expect(specimen.style.fontFeatureSettings).toBe('"liga"');
+
+    // Output is sorted, so the value does not depend on click order.
+    fireEvent.click(kern);
+    expect(specimen.style.fontFeatureSettings).toBe('"kern", "liga"');
+
+    fireEvent.click(liga);
+    expect(specimen.style.fontFeatureSettings).toBe('"kern"');
+
+    fireEvent.click(kern);
+    expect(specimen.style.fontFeatureSettings).toBe("normal");
+  });
+
+  it("drives the type scale and character sets too", async () => {
+    const main = await openSpecimen(
+      new File([buildTrueTypeFont({ gsub: true })], "Layout.ttf"),
+    );
+
+    fireEvent.click(within(main).getByRole("switch", { name: /liga/ }));
+
+    const scaled = [
+      ...main.querySelectorAll<HTMLElement>("[style*='font-size']"),
+    ];
+    expect(scaled.length).toBeGreaterThan(0);
+    for (const node of scaled) {
+      expect(node.style.fontFeatureSettings).toBe('"liga"');
+    }
+  });
+});

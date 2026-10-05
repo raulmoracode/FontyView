@@ -1,4 +1,9 @@
 import { useMemo, useState } from "react";
+import {
+  FeatureControls,
+  type FeatureToggles,
+  toFeatureSettings,
+} from "@/components/font/feature-controls";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { LayoutTable } from "@/lib/font/tables/layout";
 import { cn } from "@/lib/utils";
 
 const SIZE_STEPS = [12, 16, 20, 24, 32, 40, 48, 64, 80, 96, 120, 160];
@@ -51,6 +57,7 @@ const CHARSETS: { id: string; label: string; lines: string[] }[] = [
 
 type SpecimenStyle = {
   fontSize: number;
+  fontFeatureSettings: string;
   tracking: number;
   lineHeight: number;
   alignment: Alignment;
@@ -61,6 +68,7 @@ type SpecimenStyle = {
 function useSpecimenStyle() {
   const [style, setStyle] = useState<SpecimenStyle>({
     fontSize: 48,
+    fontFeatureSettings: "normal",
     tracking: 0,
     lineHeight: 1.2,
     alignment: "left",
@@ -97,7 +105,7 @@ function SpecimenText({
         textAlign: style.alignment,
         color: style.color ?? "hsl(var(--foreground))",
         fontKerning: "normal",
-        fontVariantLigatures: "common-ligatures",
+        fontFeatureSettings: style.fontFeatureSettings,
       }}
     >
       {lines.join("\n")}
@@ -105,10 +113,23 @@ function SpecimenText({
   );
 }
 
-export function Specimen({ family }: { family: string }) {
+export function Specimen({
+  family,
+  layout,
+}: {
+  family: string;
+  layout: LayoutTable[];
+}) {
   const { style, update } = useSpecimenStyle();
   const [text, setText] = useState(DEFAULT_TEXT);
   const [customSize, setCustomSize] = useState("48");
+  const [enabledFeatures, setEnabledFeatures] = useState<FeatureToggles>({});
+
+  const featureSettings = toFeatureSettings(enabledFeatures);
+  const effectiveStyle: SpecimenStyle = {
+    ...style,
+    fontFeatureSettings: featureSettings,
+  };
 
   const scale = useMemo(
     () =>
@@ -142,7 +163,7 @@ export function Specimen({ family }: { family: string }) {
               <SpecimenText
                 family={family}
                 lines={["Handgloves 0123"]}
-                style={{ ...style, fontSize: size }}
+                style={{ ...effectiveStyle, fontSize: size }}
               />
             </div>
           ))}
@@ -183,7 +204,7 @@ export function Specimen({ family }: { family: string }) {
                 <SpecimenText
                   family={family}
                   lines={charset.lines}
-                  style={style}
+                  style={effectiveStyle}
                 />
               </TabsContent>
             ))}
@@ -219,10 +240,20 @@ export function Specimen({ family }: { family: string }) {
           </div>
 
           <div className="rounded-md border border-border bg-muted/30 p-4">
-            <SpecimenText family={family} lines={[text || " "]} style={style} />
+            <SpecimenText
+              family={family}
+              lines={[text || " "]}
+              style={effectiveStyle}
+            />
           </div>
         </CardContent>
       </Card>
+
+      <FeatureControls
+        layout={layout}
+        enabled={enabledFeatures}
+        onChange={setEnabledFeatures}
+      />
 
       <Card>
         <CardHeader>
