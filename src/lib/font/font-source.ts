@@ -28,6 +28,7 @@ import {
   parseRawGlyph,
   type RawGlyph,
 } from "./tables/glyf";
+import { type LayoutTable, parseLayoutTable } from "./tables/layout";
 import { type GlyphMetric, parseHmtx, parsePost } from "./tables/metrics";
 import { decodeWoff2 } from "./woff2";
 
@@ -137,6 +138,8 @@ export type FontStructure = {
   metrics: GlyphMetric[];
   /** `loca` offsets, only for TrueType-outline fonts. */
   loca: Uint32Array | null;
+  /** Present only when the font has a GSUB or GPOS table. */
+  layout: LayoutTable[];
   tableSizes: { tag: string; length: number }[];
 };
 
@@ -168,6 +171,17 @@ export function readFontStructure(font: UnpackedFont): FontStructure {
       ? parseHmtx(hmtxBytes, hhea.numberOfHMetrics, numGlyphs)
       : [];
 
+  const layout: LayoutTable[] = [];
+  for (const kind of ["GSUB", "GPOS"] as const) {
+    const raw = tableBytes(bytes, directory, kind);
+    if (!raw) continue;
+    try {
+      layout.push(parseLayoutTable(raw, kind));
+    } catch {
+      // A damaged layout table should not invalidate the rest of the font.
+    }
+  }
+
   const isTrueType = directory.tables.some((table) => table.tag === "glyf");
   const locaBytes = tableBytes(bytes, directory, "loca");
   const loca =
@@ -186,6 +200,7 @@ export function readFontStructure(font: UnpackedFont): FontStructure {
     numGlyphs,
     metrics,
     loca,
+    layout,
     tableSizes,
   };
 }
