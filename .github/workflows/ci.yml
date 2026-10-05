@@ -38,6 +38,12 @@ jobs:
       - name: Check formatting and lint
         run: pnpm check
 
+      - name: Typecheck
+        # Biome does not validate types and the tests do not either: a file
+        # that fails to compile still runs. This is the step that catches it,
+        # which is why one merged without it.
+        run: pnpm exec tsc -b
+
       - name: Test
         # CI is set so Vitest runs once instead of watching.
         run: pnpm exec vitest run
