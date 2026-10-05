@@ -8,6 +8,7 @@ import {
   GlyphDetailPanel,
 } from "@/components/font/glyph-detail-panel";
 import { GlyphMetricsView } from "@/components/font/glyph-metrics-view";
+import { GlyphOutlineViewer } from "@/components/font/glyph-outline-viewer";
 import { KerningViewer } from "@/components/font/kerning-viewer";
 import { OpenTypeFeatures } from "@/components/font/opentype-features";
 import { OpenTypeTables } from "@/components/font/opentype-tables";
@@ -161,17 +162,30 @@ function renderSection(
           selectedGlyphId={selectedGlyphId}
           onSelect={(glyph) => onSelectGlyph(glyph.glyphId)}
           detail={
-            <GlyphDetailPanel
-              detail={buildDetail(loaded, selected ?? null)}
-              family={loaded.analysis.cssFamilyName}
-              char={selected?.char ?? null}
-              codepoints={selected?.codepoints ?? []}
-              category={
-                selected
-                  ? CATEGORY_LABELS[categoryOf(selected)]
-                  : CATEGORY_LABELS.unassigned
-              }
-            />
+            <div className="flex flex-col gap-6">
+              <GlyphDetailPanel
+                detail={buildDetail(loaded, selected ?? null)}
+                family={loaded.analysis.cssFamilyName}
+                char={selected?.char ?? null}
+                codepoints={selected?.codepoints ?? []}
+                category={
+                  selected
+                    ? CATEGORY_LABELS[categoryOf(selected)]
+                    : CATEGORY_LABELS.unassigned
+                }
+              />
+              <GlyphOutlineViewer
+                glyph={
+                  selected ? readRawGlyphFor(loaded, selected.glyphId) : null
+                }
+                glyphName={selected?.name ?? null}
+                advanceWidth={selected?.advanceWidth ?? null}
+                available={loaded.structure.loca !== null}
+                componentNames={(glyphId) =>
+                  loaded.structure.post?.glyphNames?.[glyphId] || null
+                }
+              />
+            </div>
           }
         />
       );

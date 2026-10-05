@@ -135,6 +135,10 @@ export function parseRawGlyph(
     glyph.isComposite = true;
   }
 
+  // A glyph is empty only when it has neither contours nor components: a
+  // composite is made of other glyphs even though it declares no contours.
+  glyph.isEmpty = glyph.contours.length === 0 && glyph.components.length === 0;
+
   return glyph;
 }
 
