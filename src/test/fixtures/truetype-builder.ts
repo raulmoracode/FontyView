@@ -213,6 +213,7 @@ function buildName(
   family: string,
   subfamily: string,
   version: string,
+  extra: { nameId: number; value: string }[] = [],
 ): Uint8Array {
   const records: { id: number; value: string }[] = [
     { id: 1, value: family },
@@ -220,6 +221,7 @@ function buildName(
     { id: 4, value: `${family} ${subfamily}` },
     { id: 5, value: version },
     { id: 6, value: `${family}-${subfamily}` },
+    ...extra.map((entry) => ({ id: entry.nameId, value: entry.value })),
   ];
 
   const strings = writer();
@@ -498,9 +500,109 @@ function buildKern(): Uint8Array {
   return w.done();
 }
 
+/**
+ * A `fvar` table declaring three axes and four named instances, with matching
+ * name records, so the variation parser has real data to read.
+ */
+function buildFvar(
+  axisNames: { tag: string; name: string }[],
+  instances: { name: string; coordinates: number[] }[],
+  baseNameId: number,
+): { fvar: Uint8Array; names: { nameId: number; value: string }[] } {
+  const axisCount = axisNames.length;
+  const instanceSize = 4 + axisCount * 4 + 2;
+  const w = writer();
+
+  w.u16(1);
+  w.u16(0);
+  w.u16(16); // axesArrayOffset
+  w.u16(2); // reserved
+  w.u16(axisCount);
+  w.u16(20); // axisSize
+  w.u16(instances.length);
+  w.u16(instanceSize);
+
+  axisNames.forEach((axis, index) => {
+    w.tag(axis.tag);
+    w.u32(minimumFor(axis.tag));
+    w.u32(defaultFor(axis.tag));
+    w.u32(maximumFor(axis.tag));
+    w.u16(0); // flags
+    w.u16(baseNameId + index);
+  });
+
+  instances.forEach((instance, index) => {
+    w.u16(baseNameId + axisCount + index);
+    w.u16(0); // flags
+    for (const value of instance.coordinates) w.u32(value);
+    w.u16(0); // postScriptNameID
+    void index;
+  });
+
+  const names = [
+    ...axisNames.map((axis, index) => ({
+      nameId: baseNameId + index,
+      value: axis.name,
+    })),
+    ...instances.map((instance, index) => ({
+      nameId: baseNameId + axisCount + index,
+      value: instance.name,
+    })),
+  ];
+
+  return { fvar: w.done(), names };
+}
+
+/** Axis limits are stored as 16.16 fixed point, so they are written shifted. */
+function minimumFor(tag: string): number {
+  if (tag === "wght") return 100 << 16;
+  if (tag === "wdth") return 75 << 16;
+  if (tag === "opsz") return 8 << 16;
+  return 0;
+}
+
+function defaultFor(tag: string): number {
+  if (tag === "wght") return 400 << 16;
+  if (tag === "wdth") return 100 << 16;
+  if (tag === "opsz") return 16 << 16;
+  return 0;
+}
+
+function maximumFor(tag: string): number {
+  if (tag === "wght") return 900 << 16;
+  if (tag === "wdth") return 125 << 16;
+  if (tag === "opsz") return 72 << 16;
+  return 0;
+}
+
+export type VariableFixture = {
+  fvar: Uint8Array;
+  /** Variation name records, merged into the name table. */
+  names: { nameId: number; value: string }[];
+};
+
+export const VARIABLE_AXES: { tag: string; name: string }[] = [
+  { tag: "wght", name: "Weight" },
+  { tag: "wdth", name: "Width" },
+  { tag: "opsz", name: "Optical size" },
+];
+
+export const VARIABLE_INSTANCES: { name: string; coordinates: number[] }[] = [
+  { name: "Light", coordinates: [300 << 16, 100 << 16, 14 << 16] },
+  { name: "Regular", coordinates: [400 << 16, 100 << 16, 16 << 16] },
+  { name: "Bold", coordinates: [700 << 16, 100 << 16, 20 << 16] },
+  { name: "Wide Bold", coordinates: [700 << 16, 125 << 16, 20 << 16] },
+];
+
+export function buildVariableFixture(): VariableFixture {
+  // 16.16 fixed point, so a value of 400 is stored as 400 << 16.
+  return buildFvar(VARIABLE_AXES, VARIABLE_INSTANCES, 256);
+}
+
 export function buildTrueTypeFont(options?: {
   gsub?: boolean;
   kern?: boolean;
+  variable?: boolean;
 }): Uint8Array<ArrayBuffer> {
   const numGlyphs = GLYPHS.length;
   const cmapEntries: [number, number][] = [
@@ -597,6 +699,8 @@ export function buildTrueTypeFont(options?: {
   for (let i = 0; i < 4; i++) post.u32(0);
   const postBytes = post.done();
 
+  const variable = options?.variable ? buildVariableFixture() : null;
+
   const tables: { tag: string; data: Uint8Array }[] = [
     { tag: "cmap", data: buildCmap(cmapEntries) },
     { tag: "glyf", data: glyfBytes },
@@ -607,11 +711,17 @@ export function buildTrueTypeFont(options?: {
     { tag: "maxp", data: maxpBytes },
     {
       tag: "name",
-      data: buildName("Fixture TrueType", "Regular", "Version 1.000"),
+      data: buildName(
+        "Fixture TrueType",
+        "Regular",
+        "Version 1.000",
+        variable?.names ?? [],
+      ),
     },
     { tag: "post", data: postBytes },
     ...(options?.gsub ? [{ tag: "GSUB", data: buildGsub() }] : []),
     ...(options?.kern ? [{ tag: "kern", data: buildKern() }] : []),
+    ...(variable ? [{ tag: "fvar", data: variable.fvar }] : []),
   ].sort((a, b) => (a.tag < b.tag ? -1 : 1));
 
   const numTables = tables.length;

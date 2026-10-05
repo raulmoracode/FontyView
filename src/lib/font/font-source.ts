@@ -31,6 +31,7 @@ import {
 import { type KerningData, readKerning } from "./tables/kerning";
 import { type LayoutTable, parseLayoutTable } from "./tables/layout";
 import { type GlyphMetric, parseHmtx, parsePost } from "./tables/metrics";
+import { readVariationData, type VariationData } from "./tables/variations";
 import { decodeWoff2 } from "./woff2";
 
 export type UnpackedFont = {
@@ -142,6 +143,7 @@ export type FontStructure = {
   /** Present only when the font has a GSUB or GPOS table. */
   layout: LayoutTable[];
   kerning: KerningData;
+  variation: VariationData;
   tableSizes: { tag: string; length: number }[];
 };
 
@@ -193,6 +195,17 @@ export function readFontStructure(font: UnpackedFont): FontStructure {
 
   const kernTable = tableBytes(bytes, directory, "kern");
   const gposTable = tableBytes(bytes, directory, "GPOS");
+  const variation = readVariationData(
+    {
+      fvar: tableBytes(bytes, directory, "fvar"),
+      avar: tableBytes(bytes, directory, "avar"),
+      gvar: tableBytes(bytes, directory, "gvar"),
+      hvar: tableBytes(bytes, directory, "HVAR"),
+      stat: tableBytes(bytes, directory, "STAT"),
+    },
+    names,
+  );
+
   const kerning = readKerning(
     kernTable,
     gposTable ? { gpos: gposTable, lookupListOffset: 0 } : null,
@@ -211,6 +224,7 @@ export function readFontStructure(font: UnpackedFont): FontStructure {
     loca,
     layout,
     kerning,
+    variation,
     tableSizes,
   };
 }
