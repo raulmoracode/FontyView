@@ -1198,3 +1198,81 @@ describe("variable fonts", () => {
     expect(specimen.style.fontVariationSettings).toBe('"wght" 300, "opsz" 14');
   });
 });
+
+describe("glyph outline viewer", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  async function openOutline(glyphName: RegExp) {
+    render(<App />);
+    selectFile(fixtureFile());
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Glyphs" }));
+    await waitFor(() => {
+      expect(screen.getByText("GLYPHS")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: glyphName }));
+    return screen.getByRole("main");
+  }
+
+  it("draws the real contours, points and handles", async () => {
+    const main = await openOutline(/Glyph 2, B/);
+
+    expect(main.textContent).toContain("OUTLINE");
+    // The fixture's glyph 2 has two contours and seven points.
+    expect(main.textContent).toContain("2 contours");
+    expect(main.textContent).toContain("7 points");
+
+    const svg = within(main).getByRole("img", { name: /Outline of/ });
+    expect(svg.querySelector("path")?.getAttribute("d")).toBeTruthy();
+
+    // Seven point markers for the seven real points.
+    const pointTitles = [...svg.querySelectorAll("title")].map(
+      (node) => node.textContent ?? "",
+    );
+    expect(pointTitles.filter((text) => text.includes("Point "))).toHaveLength(
+      7,
+    );
+  });
+
+  it("lists the components of a composite glyph", async () => {
+    const main = await openOutline(/^Glyph 3/);
+
+    expect(main.textContent).toContain("Composite");
+    expect(main.textContent).toContain("Components");
+    // The fixture's glyph 3 references glyphs 1 and 2.
+    expect(main.textContent).toContain("glyph 1");
+    expect(main.textContent).toContain("glyph 2");
+    expect(main.textContent).toContain("offset (600, 0)");
+  });
+
+  it("zooms and toggles the guides", async () => {
+    const main = await openOutline(/Glyph 1, A/);
+
+    const svg = () => within(main).getByRole("img", { name: /Outline of/ });
+    const before = svg().getAttribute("style") ?? "";
+
+    fireEvent.click(within(main).getByRole("button", { name: "Zoom in" }));
+    expect(svg().getAttribute("style")).not.toBe(before);
+    expect(main.textContent).toContain("2×");
+
+    // Points can be hidden, which removes their markers.
+    const withPoints = svg().querySelectorAll("circle").length;
+    fireEvent.click(within(main).getByLabelText("Points"));
+    expect(svg().querySelectorAll("circle").length).toBeLessThan(withPoints);
+  });
+
+  it("says an empty glyph has no contours", async () => {
+    const main = await openOutline(/^Glyph 0/);
+    expect(main.textContent).toContain(
+      "This glyph is empty: it has no contours",
+    );
+  });
+});
