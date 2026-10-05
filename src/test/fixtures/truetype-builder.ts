@@ -474,8 +474,33 @@ function buildGsub(): Uint8Array {
   return w.done();
 }
 
+/**
+ * A Microsoft-format `kern` table (version 1) with three known pairs, so the
+ * traditional kerning path has real data to read.
+ */
+function buildKern(): Uint8Array {
+  const pairs: [number, number, number][] = [
+    [1, 2, -60], // A followed by B
+    [1, 4, -20], // A followed by e-acute (glyph 4)
+    [2, 1, -55], // B followed by A
+  ];
+  const w = writer();
+  w.u16(1); // version
+  w.u16(pairs.length);
+  w.u16(6); // searchRange
+  w.u16(0); // entrySelector
+  w.u16(0); // rangeShift
+  for (const [left, right, value] of pairs) {
+    w.u16(left);
+    w.u16(right);
+    w.i16(value);
+  }
+  return w.done();
+}
+
 export function buildTrueTypeFont(options?: {
   gsub?: boolean;
+  kern?: boolean;
 }): Uint8Array<ArrayBuffer> {
   const numGlyphs = GLYPHS.length;
   const cmapEntries: [number, number][] = [
@@ -586,6 +611,7 @@ export function buildTrueTypeFont(options?: {
     },
     { tag: "post", data: postBytes },
     ...(options?.gsub ? [{ tag: "GSUB", data: buildGsub() }] : []),
+    ...(options?.kern ? [{ tag: "kern", data: buildKern() }] : []),
   ].sort((a, b) => (a.tag < b.tag ? -1 : 1));
 
   const numTables = tables.length;
