@@ -6,7 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
 import { useFontStore } from "@/store/font-store";
 import { buildTrueTypeFont } from "./fixtures/truetype-builder";
@@ -1351,5 +1351,132 @@ describe("ligatures view", () => {
     expect(main.textContent).toContain("no");
     expect(main.textContent).toContain("GSUB");
     expect(within(main).queryByRole("img")).toBeNull();
+  });
+});
+
+describe("JSON export", () => {
+  const createObjectURL = vi.fn(() => "blob:fontyview");
+  const revokeObjectURL = vi.fn();
+  const click = vi
+    .spyOn(HTMLAnchorElement.prototype, "click")
+    .mockImplementation(() => {});
+
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+    createObjectURL.mockClear();
+    revokeObjectURL.mockClear();
+    click.mockClear();
+    URL.createObjectURL = createObjectURL;
+    URL.revokeObjectURL = revokeObjectURL;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  async function openExport() {
+    render(<App />);
+    selectFile(
+      new File(
+        [buildTrueTypeFont({ gsub: true, kern: true, variable: true })],
+        "Fixture.ttf",
+      ),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Export Report" }));
+    await waitFor(() => {
+      expect(screen.getByText("EXPORT")).toBeDefined();
+    });
+    return screen.getByRole("main");
+  }
+
+  const ALL_SECTIONS = [
+    "Metadata",
+    "Tables",
+    "Metrics",
+    "Unicode coverage",
+    "Scripts",
+    "OpenType features",
+    "Kerning",
+    "Ligatures",
+    "Variation axes",
+    "Glyphs",
+  ];
+
+  function setSection(main: HTMLElement, section: string, wanted: boolean) {
+    const control = within(main).getByLabelText(section);
+    if ((control.getAttribute("aria-checked") === "true") !== wanted) {
+      fireEvent.click(control);
+    }
+  }
+
+  /** Leaves only the named section enabled. */
+  function selectOnly(main: HTMLElement, keep: string) {
+    for (const section of ALL_SECTIONS) {
+      setSection(main, section, section === keep);
+    }
+  }
+
+  it("previews real analysis and names the file after the font", async () => {
+    const main = await openExport();
+
+    expect(main.textContent).toContain(
+      "Fixture-TrueType-Regular-analysis.json",
+    );
+    const preview = main.querySelector("pre")?.textContent ?? "";
+    expect(preview.startsWith('{\n  "generator": "FontyView"')).toBe(true);
+    // The font's own bytes must not appear in the export.
+    expect(preview).not.toContain('"bytes"');
+  });
+
+  it("changes the preview when a section is toggled", async () => {
+    const main = await openExport();
+    selectOnly(main, "Glyphs");
+    const preview = main.querySelector("pre")?.textContent ?? "";
+
+    expect(preview).toContain('"glyphs"');
+    expect(preview).toContain("advanceWidth");
+    expect(preview).toContain('"unicode": "U+0041"');
+    // Nothing else survived the selection.
+    expect(preview).not.toContain('"kerning"');
+    expect(preview).not.toContain('"tables"');
+  });
+
+  it("exports kerning pairs as plain numbers", async () => {
+    const main = await openExport();
+    selectOnly(main, "Kerning");
+    const preview = main.querySelector("pre")?.textContent ?? "";
+
+    expect(preview).toContain('"pairs"');
+    expect(preview).toContain('"value"');
+  });
+
+  it("downloads the file through a blob URL", async () => {
+    const main = await openExport();
+
+    fireEvent.click(within(main).getByRole("button", { name: "Download" }));
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:fontyview");
+    expect(click).toHaveBeenCalledTimes(1);
+    const link = click.mock.instances[0] as HTMLAnchorElement;
+    expect(link.download).toBe("Fixture-TrueType-Regular-analysis.json");
+    expect(link.href).toContain("blob:fontyview");
+  });
+
+  it("cannot be downloaded with nothing selected", async () => {
+    const main = await openExport();
+
+    for (const section of ALL_SECTIONS) {
+      setSection(main, section, false);
+    }
+
+    expect(
+      within(main).getByRole("button", { name: "Download" }),
+    ).toHaveProperty("disabled", true);
+    fireEvent.click(within(main).getByRole("button", { name: "Download" }));
+    expect(createObjectURL).not.toHaveBeenCalled();
   });
 });
