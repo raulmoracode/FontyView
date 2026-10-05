@@ -1,4 +1,9 @@
-import type { GlyphPoint } from "./tables/glyf";
+import type {
+  GlyphComponent,
+  GlyphContour,
+  GlyphPoint,
+  RawGlyph,
+} from "./tables/glyf";
 
 /**
  * Converts TrueType contours into SVG path data.
@@ -95,4 +100,66 @@ function walk(points: GlyphPoint[], round: (n: number) => string): string {
 
   commands.push("Z");
   return commands.join(" ");
+}
+
+/** Deep enough for any real composite, shallow enough to stop a cycle. */
+const MAX_COMPOSITE_DEPTH = 8;
+
+/**
+ * A composite glyph's contours in its own space, resolved from the glyphs it
+ * references. Ligature glyphs are usually composites, so this is what makes a
+ * ligature drawable.
+ */
+export function glyphContours(
+  glyph: RawGlyph | null,
+  resolve: (glyphId: number) => RawGlyph | null,
+  depth = 0,
+): GlyphContour[] {
+  if (!glyph || depth > MAX_COMPOSITE_DEPTH) return [];
+  if (!glyph.isComposite) return glyph.contours;
+
+  const out: GlyphContour[] = [];
+  for (const component of glyph.components) {
+    for (const contour of glyphContours(
+      resolve(component.glyphId),
+      resolve,
+      depth + 1,
+    )) {
+      out.push(transformContour(contour, component));
+    }
+  }
+  return out;
+}
+
+/** Path data for a glyph, following composite references. */
+export function glyphToPath(
+  glyph: RawGlyph | null,
+  resolve: (glyphId: number) => RawGlyph | null,
+): string {
+  return contoursToPath(glyphContours(glyph, resolve));
+}
+
+/**
+ * Places a component where the composite asks for it. Per the spec a component
+ * is either offset by x and y, or placed by a 2x2 matrix, and the offset is
+ * only meaningful when the matrix is the identity.
+ */
+function transformContour(
+  contour: GlyphContour,
+  component: GlyphComponent,
+): GlyphContour {
+  const [a, b, c, d] = component.transform;
+  const identity = a === 1 && b === 0 && c === 0 && d === 1;
+  const offsetX = identity ? component.x : 0;
+  const offsetY = identity ? component.y : 0;
+  const place = (point: GlyphPoint): GlyphPoint => ({
+    ...point,
+    x: a * point.x + c * point.y + offsetX,
+    y: b * point.x + d * point.y + offsetY,
+  });
+
+  return {
+    ...contour,
+    points: contour.points.map(place),
+  };
 }
