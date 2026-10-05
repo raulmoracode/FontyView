@@ -6,6 +6,7 @@ import { KerningViewer } from "@/components/font/kerning-viewer";
 import { OpenTypeFeatures } from "@/components/font/opentype-features";
 import { OpenTypeTables } from "@/components/font/opentype-tables";
 import { Overview } from "@/components/font/overview";
+import { Scripts } from "@/components/font/scripts";
 import { Specimen } from "@/components/font/specimen";
 import { UnicodeCoverage } from "@/components/font/unicode-coverage";
 import { AppShell } from "@/components/layout/app-shell";
@@ -84,6 +85,8 @@ function renderSection(
       return <OpenTypeFeatures layout={loaded.structure.layout} />;
     case "unicode":
       return <UnicodeCoverage coverage={coverage} />;
+    case "scripts":
+      return <Scripts coverage={coverage} />;
     case "character-map":
       return (
         <CharacterMap
