@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { CharacterMap } from "@/components/font/character-map";
 import { FontInformation } from "@/components/font/font-information";
 import { FontMetricsView } from "@/components/font/font-metrics";
 import { KerningViewer } from "@/components/font/kerning-viewer";
@@ -83,6 +84,13 @@ function renderSection(
       return <OpenTypeFeatures layout={loaded.structure.layout} />;
     case "unicode":
       return <UnicodeCoverage coverage={coverage} />;
+    case "character-map":
+      return (
+        <CharacterMap
+          coverage={coverage}
+          family={loaded.analysis.cssFamilyName}
+        />
+      );
     case "kerning":
       return (
         <KerningViewer

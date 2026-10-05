@@ -684,3 +684,76 @@ describe("unicode coverage", () => {
     expect(main.textContent).toContain("No block matches that filter.");
   });
 });
+
+describe("character map", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  async function openCharacterMap() {
+    render(<App />);
+    selectFile(fixtureFile());
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Character Map" }));
+    await waitFor(() => {
+      expect(screen.getByText("CHARACTER MAP")).toBeDefined();
+    });
+    return screen.getByRole("main");
+  }
+
+  it("groups characters by the blocks the font covers", async () => {
+    const main = await openCharacterMap();
+
+    expect(main.textContent).toContain("3 characters");
+    expect(main.textContent).toContain("2 blocks");
+    expect(within(main).getByText("Basic Latin")).toBeDefined();
+    expect(within(main).getByText("Latin-1 Supplement")).toBeDefined();
+
+    // The three characters in the fixture's cmap, shown with their code points.
+    expect(within(main).getByTitle("A · U+0041")).toBeDefined();
+    expect(within(main).getByTitle("B · U+0042")).toBeDefined();
+    expect(within(main).getByTitle("é · U+00E9")).toBeDefined();
+  });
+
+  it("searches by character and by code point", async () => {
+    const main = await openCharacterMap();
+
+    const field = within(main).getByLabelText("Search characters");
+
+    fireEvent.change(field, { target: { value: "0041" } });
+    expect(within(main).getByTitle("A · U+0041")).toBeDefined();
+    expect(within(main).queryByTitle("B · U+0042")).toBeNull();
+
+    // Prefixes and padding are accepted.
+    for (const query of ["U+0041", "u+41", "41", "65"]) {
+      fireEvent.change(field, { target: { value: query } });
+      expect(within(main).getByTitle("A · U+0041")).toBeDefined();
+    }
+
+    fireEvent.change(field, { target: { value: "b" } });
+    expect(within(main).getByTitle("B · U+0042")).toBeDefined();
+    expect(within(main).queryByTitle("A · U+0041")).toBeNull();
+
+    fireEvent.change(field, { target: { value: "zzz" } });
+    expect(main.textContent).toContain(
+      "No character in this font matches that search.",
+    );
+  });
+
+  it("narrows to a single block", async () => {
+    const main = await openCharacterMap();
+
+    fireEvent.click(within(main).getByRole("combobox", { name: "Block" }));
+    fireEvent.click(await screen.findByRole("option", { name: /Basic Latin/ }));
+
+    expect(within(main).getByText("Basic Latin")).toBeDefined();
+    expect(within(main).queryByText("Latin-1 Supplement")).toBeNull();
+    expect(main.textContent).toContain("2 characters");
+  });
+});
