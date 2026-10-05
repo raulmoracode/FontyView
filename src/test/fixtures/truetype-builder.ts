@@ -323,7 +323,160 @@ const GLYPHS: GlyphSpec[] = [
 ];
 
 /** A spec-valid TrueType font with TrueType outlines, built in memory. */
-export function buildTrueTypeFont(): Uint8Array<ArrayBuffer> {
+
+/**
+ * A minimal but coherent GSUB table: three features wired to three different
+ * lookup types, so the layout parser has real structure to read. Offsets are
+ * computed from the assembled sizes rather than hand-counted.
+ */
+function buildGsub(): Uint8Array {
+  const langsys = (() => {
+    const w = writer();
+    w.u16(0); // lookupOrderOffset
+    w.u16(0xffff); // requiredFeatureIndex
+    w.u16(2); // featureIndexCount
+    w.u16(0);
+    w.u16(1);
+    return w.done();
+  })();
+
+  const script = (() => {
+    const w = writer();
+    const langsysOffset = 10;
+    w.u16(langsysOffset); // defaultLangSysOffset
+    w.u16(1); // langSysCount
+    w.tag("dflt");
+    w.u16(langsysOffset);
+    w.raw(langsys);
+    return w.done();
+  })();
+
+  const scriptList = (() => {
+    const w = writer();
+    w.u16(1);
+    w.tag("DFLT");
+    // Offset from the start of the script list, past its own record.
+    w.u16(8);
+    w.raw(script);
+    return w.done();
+  })();
+
+  const featureTable = (() => {
+    const w = writer();
+    w.u16(0); // featureParams
+    w.u16(1); // lookupIndexCount
+    w.u16(0); // lookupListIndex
+    return w.done();
+  })();
+
+  const featureList = (() => {
+    const count = 3;
+    const headerSize = 2 + count * 6;
+    const w = writer();
+    w.u16(count);
+    const tags = ["liga", "kern", "ss01"];
+    tags.forEach((tag, index) => {
+      const [a, b, c, d] = [
+        tag.charCodeAt(0),
+        tag.charCodeAt(1),
+        tag.charCodeAt(2),
+        tag.charCodeAt(3),
+      ];
+      w.u16((a << 8) | b);
+      w.u16((c << 8) | d);
+      w.u16(headerSize + index * featureTable.byteLength);
+    });
+    for (let i = 0; i < count; i++) w.raw(featureTable);
+    return w.done();
+  })();
+
+  // Lookup 0: ligature substitution, f + i -> fi.
+  const ligatureLookup = (() => {
+    const w = writer();
+    w.u16(4);
+    w.u16(0);
+    w.u16(1); // subtableCount
+    w.u16(8); // subtable offset
+    // coverage format 1
+    w.u16(1);
+    w.u16(2);
+    w.u16(1);
+    w.u16(2);
+    // ligature set
+    w.u16(1);
+    w.u16(8);
+    w.u16(1); // ligatureCount
+    w.u16(1); // component glyph 2
+    w.u16(3); // ligature glyph 3
+    return w.done();
+  })();
+
+  // Lookup 1: single positioning with an x-advance of -20.
+  const positioningLookup = (() => {
+    const w = writer();
+    w.u16(9);
+    w.u16(0);
+    w.u16(1);
+    w.u16(8);
+    w.u16(1); // format 1
+    w.u16(8); // coverage offset
+    w.u16(1); // valueFormat: xAdvance
+    w.u16(1); // pairSetCount
+    w.u16(1); // pairSet offset
+    w.u16(0); // secondGlyph
+    w.i16(-20); // xAdvance
+    return w.done();
+  })();
+
+  // Lookup 2: extension substitution wrapping a single substitution.
+  const extensionLookup = (() => {
+    const w = writer();
+    w.u16(7);
+    w.u16(0);
+    w.u16(1);
+    w.u16(8);
+    w.u16(1); // format 1
+    w.u16(1); // extensionLookupType
+    w.u16(12); // extension offset
+    // Wrapped single substitution subtable.
+    w.u16(1);
+    w.u16(8); // coverage offset
+    w.u16(1); // format 1
+    w.u16(2); // deltaGlyphID
+    return w.done();
+  })();
+
+  const lookupList = (() => {
+    const lookups = [ligatureLookup, positioningLookup, extensionLookup];
+    const headerSize = 2 + lookups.length * 2;
+    const w = writer();
+    w.u16(lookups.length);
+    let offset = headerSize;
+    for (const lookup of lookups) {
+      w.u16(offset);
+      offset += lookup.byteLength;
+    }
+    for (const lookup of lookups) w.raw(lookup);
+    return w.done();
+  })();
+
+  const headerSize = 14; // 10 header bytes plus a 4-byte featureVariationsOffset
+  const w = writer();
+  w.u16(1);
+  w.u16(1);
+  w.u16(headerSize); // scriptListOffset
+  w.u16(headerSize + scriptList.byteLength); // featureListOffset
+  w.u16(headerSize + scriptList.byteLength + featureList.byteLength); // lookupListOffset
+  w.u32(0); // featureVariationsOffset
+  w.raw(scriptList);
+  w.raw(featureList);
+  w.raw(lookupList);
+  return w.done();
+}
+
+export function buildTrueTypeFont(options?: {
+  gsub?: boolean;
+}): Uint8Array<ArrayBuffer> {
   const numGlyphs = GLYPHS.length;
   const cmapEntries: [number, number][] = [
     [0x41, 1],
@@ -432,6 +585,7 @@ export function buildTrueTypeFont(): Uint8Array<ArrayBuffer> {
       data: buildName("Fixture TrueType", "Regular", "Version 1.000"),
     },
     { tag: "post", data: postBytes },
+    ...(options?.gsub ? [{ tag: "GSUB", data: buildGsub() }] : []),
   ].sort((a, b) => (a.tag < b.tag ? -1 : 1));
 
   const numTables = tables.length;

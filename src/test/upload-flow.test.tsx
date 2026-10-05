@@ -383,3 +383,68 @@ describe("specimen", () => {
     expect(pangram.style.textAlign).toBe("center");
   });
 });
+
+describe("opentype features", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  async function openFeatures(font: File) {
+    render(<App />);
+    selectFile(font);
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Features" }));
+    await waitFor(() => {
+      expect(screen.getByText("FEATURES")).toBeDefined();
+    });
+    return screen.getByRole("main");
+  }
+
+  it("says so plainly when a font has no layout tables", async () => {
+    const main = await openFeatures(fixtureFile());
+    expect(main.textContent).toContain(
+      "This font has no GSUB or GPOS table, so it implements no OpenType layout features.",
+    );
+  });
+
+  it("lists the features a GSUB table really declares", async () => {
+    const main = await openFeatures(
+      new File([buildTrueTypeFont({ gsub: true })], "Layout.ttf"),
+    );
+
+    // The three features written into the fixture's GSUB.
+    expect(within(main).getByText("liga").closest("tr")?.textContent).toContain(
+      "Standard ligatures",
+    );
+    expect(within(main).getByText("kern").closest("tr")?.textContent).toContain(
+      "Kerning",
+    );
+    expect(within(main).getByText("ss01").closest("tr")?.textContent).toContain(
+      "Stylistic set 1",
+    );
+
+    // Lookup types are resolved from the real lookup list.
+    expect(main.textContent).toContain("Ligature substitution");
+    expect(main.textContent).toContain("Single positioning");
+    expect(main.textContent).toContain("Extension substitution");
+
+    // And the script system is reported.
+    expect(main.textContent).toContain("DFLT");
+  });
+
+  it("never lists a feature the font does not declare", async () => {
+    const main = await openFeatures(
+      new File([buildTrueTypeFont({ gsub: true })], "Layout.ttf"),
+    );
+
+    for (const absent of ["smcp", "onum", "tnum", "frac", "calt", "ss02"]) {
+      expect(within(main).queryByText(absent)).toBeNull();
+    }
+  });
+});

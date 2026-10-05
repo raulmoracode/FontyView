@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { FontInformation } from "@/components/font/font-information";
 import { FontMetricsView } from "@/components/font/font-metrics";
+import { OpenTypeFeatures } from "@/components/font/opentype-features";
 import { OpenTypeTables } from "@/components/font/opentype-tables";
 import { Overview } from "@/components/font/overview";
 import { Specimen } from "@/components/font/specimen";
@@ -56,6 +57,8 @@ function renderSection(
       return <FontMetricsView structure={loaded.structure} />;
     case "specimen":
       return <Specimen family={loaded.analysis.cssFamilyName} />;
+    case "features":
+      return <OpenTypeFeatures layout={loaded.structure.layout} />;
     default:
       return <Placeholder title={SECTION_TITLES[active]} />;
   }
