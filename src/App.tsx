@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CharacterMap } from "@/components/font/character-map";
 import { ExportJsonCard } from "@/components/font/export-json-card";
 import { ExportReportCard } from "@/components/font/export-report-card";
+import { FontComparison } from "@/components/font/font-comparison";
 import { FontInformation } from "@/components/font/font-information";
 import { FontMetricsView } from "@/components/font/font-metrics";
 import { GlyphBrowser } from "@/components/font/glyph-browser";
@@ -24,7 +25,10 @@ import { AppShell } from "@/components/layout/app-shell";
 import type { SectionId } from "@/components/layout/app-sidebar";
 import { AnalyzingScreen } from "@/components/upload/analyzing-screen";
 import { UploadScreen } from "@/components/upload/upload-screen";
-import { useFontRegistration } from "@/hooks/use-font-registration";
+import {
+  useComparedFontRegistration,
+  useFontRegistration,
+} from "@/hooks/use-font-registration";
 import { buildCoverage, type CoverageSummary } from "@/lib/font/coverage";
 import {
   createGlyphSource,
@@ -155,6 +159,7 @@ function renderSection(
   onSelectGlyph: (glyphId: number) => void,
   axisValues: AxisValues,
   onAxisChange: (next: AxisValues) => void,
+  compared: LoadedFontState | null,
 ) {
   switch (active) {
     case "overview":
@@ -259,6 +264,8 @@ function renderSection(
           }
         />
       );
+    case "compare":
+      return <FontComparison primary={loaded} compared={compared} />;
     case "export":
       return (
         <div className="flex flex-col gap-8">
@@ -323,8 +330,10 @@ function App() {
   const [selectedGlyphId, setSelectedGlyphId] = useState<number | null>(null);
   const [axisValues, setAxisValues] = useState<AxisValues>({});
   const loadAnotherRef = useRef<HTMLInputElement>(null);
+  const compared = useFontStore((state) => state.compared);
 
   useFontRegistration(status === "ready" ? loaded : null);
+  useComparedFontRegistration(compared);
 
   // A new font means a new set of axes, so any previous positions are dropped.
   const analysedId = loaded?.analysis.id ?? null;
@@ -381,6 +390,7 @@ function App() {
           setSelectedGlyphId,
           axisValues,
           setAxisValues,
+          compared,
         )}
       </AppShell>
 

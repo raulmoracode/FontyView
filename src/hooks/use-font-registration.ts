@@ -2,22 +2,39 @@ import { useEffect } from "react";
 import type { LoadedFont } from "@/lib/font/analyze";
 import { useFontStore } from "@/store/font-store";
 
+/** Which slot of the store a registration belongs to. */
+type Slot = "font" | "compared";
+
+function markReady(slot: Slot, ready: boolean) {
+  const store = useFontStore.getState();
+  if (slot === "font") store.setFontReady(ready);
+  else store.setComparedFontReady(ready);
+}
+
+function markReset(slot: Slot) {
+  const store = useFontStore.getState();
+  if (slot === "font") store.setFontReady(false);
+  else store.setComparedFontReady(false);
+}
+
 /**
- * Registers the analysed font with the document so the browser can render it,
- * and removes it again when the font is replaced or unloaded.
+ * Registers a loaded font with the browser so it can be rendered, under the
+ * family name the analysis already carries.
  *
- * The bytes are handed straight to `FontFace`; nothing is uploaded anywhere.
+ * Environments without the CSS Font Loading API still get the full analysis,
+ * they just render with the interface's own typeface.
  */
-export function useFontRegistration(loaded: LoadedFont | null): void {
+function useRegisterSlot(slot: Slot, loaded: LoadedFont | null): void {
   const cssFamilyName = loaded?.analysis.cssFamilyName ?? null;
   const bytes = loaded?.bytes ?? null;
 
   useEffect(() => {
-    if (!cssFamilyName || !bytes) return;
-    // Environments without the CSS Font Loading API still get the full
-    // analysis, they just render with the interface's own typeface.
+    if (!cssFamilyName || !bytes) {
+      markReset(slot);
+      return;
+    }
     if (typeof FontFace === "undefined" || !document.fonts) {
-      useFontStore.getState().setFontReady(false);
+      markReady(slot, false);
       return;
     }
 
@@ -35,13 +52,13 @@ export function useFontRegistration(loaded: LoadedFont | null): void {
       .then((loadedFace) => {
         if (cancelled) return;
         document.fonts.add(loadedFace);
-        useFontStore.getState().setFontReady(true);
+        markReady(slot, true);
       })
       .catch(() => {
         if (cancelled) return;
         // The parser already succeeded, so rendering failure is not fatal:
         // the analysis stays usable with the interface's own typeface.
-        useFontStore.getState().setFontReady(false);
+        markReady(slot, false);
       });
 
     return () => {
@@ -52,5 +69,15 @@ export function useFontRegistration(loaded: LoadedFont | null): void {
         }
       });
     };
-  }, [cssFamilyName, bytes]);
+  }, [slot, cssFamilyName, bytes]);
+}
+
+/** Registers the font under analysis. */
+export function useFontRegistration(loaded: LoadedFont | null): void {
+  useRegisterSlot("font", loaded);
+}
+
+/** Registers the second font, when one is being compared. */
+export function useComparedFontRegistration(loaded: LoadedFont | null): void {
+  useRegisterSlot("compared", loaded);
 }

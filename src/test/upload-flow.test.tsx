@@ -1583,3 +1583,122 @@ describe("printable report", () => {
     ).toBeGreaterThan(0);
   });
 });
+
+describe("font comparison", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  const SECOND_INPUT = 'input[type="file"][accept*=".ttc"]';
+
+  async function openCompare() {
+    render(<App />);
+    selectFile(
+      new File(
+        [buildTrueTypeFont({ gsub: true, kern: true, variable: true })],
+        "First.ttf",
+      ),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Compare" }));
+    await waitFor(() => {
+      expect(screen.getByText("COMPARE")).toBeDefined();
+    });
+    return screen.getByRole("main");
+  }
+
+  function chooseSecondFile(file: File) {
+    const input = document.querySelector<HTMLInputElement>(SECOND_INPUT);
+    if (!input) throw new Error("comparison file input not found");
+    fireEvent.change(input, { target: { files: [file] } });
+  }
+
+  it("asks for a second font before comparing anything", async () => {
+    const main = await openCompare();
+
+    expect(main.textContent).toContain("Load a second font to compare");
+    expect(
+      within(main).getByRole("button", { name: "Choose a font" }),
+    ).toBeDefined();
+  });
+
+  it("compares two real fonts side by side", async () => {
+    const main = await openCompare();
+
+    fireEvent.click(
+      within(main).getByRole("button", { name: "Choose a font" }),
+    );
+    chooseSecondFile(new File([buildTrueTypeFont()], "Second.ttf"));
+
+    await waitFor(() => {
+      expect(within(main).getByText("Table differences")).toBeDefined();
+    });
+
+    expect(main.textContent).toContain("5 of 27 values differ");
+    expect(main.textContent).toContain("Same text, both fonts");
+    // The first font's layout tables and axes are missing from the second.
+    expect(main.textContent).toContain("Variation axes");
+    expect(main.textContent).toContain("Ligatures");
+    expect(within(main).getAllByText("Absent").length).toBeGreaterThan(0);
+  });
+
+  it("shows which font applies a feature tag", async () => {
+    const main = await openCompare();
+
+    fireEvent.click(
+      within(main).getByRole("button", { name: "Choose a font" }),
+    );
+    chooseSecondFile(new File([buildTrueTypeFont()], "Second.ttf"));
+    await waitFor(() => {
+      expect(within(main).getByText("Feature tags")).toBeDefined();
+    });
+
+    expect(main.textContent).toContain("Fixture TrueType only");
+    expect(main.textContent).toContain("liga");
+  });
+
+  it("keeps the first font when the second is removed", async () => {
+    const main = await openCompare();
+
+    fireEvent.click(
+      within(main).getByRole("button", { name: "Choose a font" }),
+    );
+    chooseSecondFile(new File([buildTrueTypeFont()], "Second.ttf"));
+    await waitFor(() => {
+      expect(
+        within(main).getAllByRole("button", { name: "Remove" }).length,
+      ).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(within(main).getByRole("button", { name: "Remove" }));
+
+    expect(main.textContent).toContain("Load a second font to compare");
+    // The font under analysis is untouched.
+    expect(useFontStore.getState().loaded).not.toBeNull();
+  });
+
+  it("drops the second font when the first is replaced", async () => {
+    await openCompare();
+
+    fireEvent.click(
+      within(screen.getByRole("main")).getByRole("button", {
+        name: "Choose a font",
+      }),
+    );
+    chooseSecondFile(new File([buildTrueTypeFont()], "Second.ttf"));
+    await waitFor(() => {
+      expect(useFontStore.getState().compared).not.toBeNull();
+    });
+
+    useFontStore.getState().clearFont();
+
+    expect(useFontStore.getState().compared).toBeNull();
+    expect(useFontStore.getState().comparedStatus).toBe("idle");
+  });
+});
