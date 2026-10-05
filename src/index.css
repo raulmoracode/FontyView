@@ -93,3 +93,32 @@
     --clr-bg-card-hover: oklch(0.205 0 0)
   }
 }
+
+/**
+ * Printing turns the app into the report: the chrome disappears, the report
+ * fills the page, and each section starts on a fresh sheet so a long analysis
+ * stays readable on paper and in a PDF.
+ */
+@media print {
+  body {
+    background: #fff;
+  }
+
+  #app-navigation,
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  [data-print-root] {
+    display: block !important;
+  }
+
+  [data-print-root] [data-print-section] {
+    break-inside: avoid;
+    break-before: page;
+  }
+
+  [data-print-root] [data-print-section]:first-child {
+    break-before: auto;
+  }
+}
