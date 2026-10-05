@@ -207,9 +207,12 @@ describe("font metrics", () => {
       expect(screen.getByText("FONT METRICS")).toBeDefined();
     });
 
-    const main = screen.getByRole("main");
+    // Labels also appear in the diagram, so match on the table row itself.
     const rowText = (label: string) =>
-      within(main).getByText(label).closest("tr")?.textContent ?? "";
+      screen
+        .getAllByText(label)
+        .map((node) => node.closest("tr")?.textContent ?? "")
+        .find((text) => text.length > 0) ?? "";
 
     // hhea
     expect(rowText("Ascender")).toContain("800");
@@ -232,13 +235,52 @@ describe("font metrics", () => {
       expect(screen.getByText("FONT METRICS")).toBeDefined();
     });
 
-    const main = screen.getByRole("main");
     const rowText = (label: string) =>
-      within(main).getByText(label).closest("tr")?.textContent ?? "";
+      screen
+        .getAllByText(label)
+        .map((node) => node.closest("tr")?.textContent ?? "")
+        .find((text) => text.length > 0) ?? "";
 
     // This fixture has no OS/2 table, so these must not be invented.
     expect(rowText("Cap height")).toContain("Not available");
     expect(rowText("x-height")).toContain("Not available");
     expect(rowText("Windows ascent")).toContain("Not available");
+  });
+});
+
+describe("metrics diagram", () => {
+  beforeEach(() => {
+    useFontStore.getState().clearFont();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("draws only the guides the font provides", async () => {
+    render(<App />);
+    selectFile(fixtureFile());
+    await waitFor(() => {
+      expect(screen.getByText("FONT OVERVIEW")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Font Metrics" }));
+    const diagram = await screen.findByRole("img", {
+      name: "Vertical metrics diagram",
+    });
+
+    // hhea ascender 800 and descender -200 exist, so both guides are drawn.
+    expect(within(diagram).getByText("Ascender")).toBeDefined();
+    expect(within(diagram).getByText("Descender")).toBeDefined();
+    expect(within(diagram).getByText("800")).toBeDefined();
+    expect(within(diagram).getByText("-200")).toBeDefined();
+
+    // OS/2 is absent, so cap height and x-height guides must not be drawn.
+    expect(within(diagram).queryByText("Cap height")).toBeNull();
+    expect(within(diagram).queryByText("x-height")).toBeNull();
+    expect(within(diagram).queryByText("Win ascent")).toBeNull();
+
+    // The em square is annotated with the real units per em.
+    expect(diagram.textContent).toContain("em square 1,000 units");
   });
 });

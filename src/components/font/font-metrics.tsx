@@ -1,3 +1,4 @@
+import { MetricsDiagram } from "@/components/font/metrics-diagram";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import type { FontStructure } from "@/lib/font/font-source";
@@ -23,6 +24,15 @@ export function FontMetricsView({ structure }: { structure: FontStructure }) {
           FONT METRICS
         </h2>
       </header>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Diagram</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <MetricsDiagram metrics={metrics} />
+        </CardContent>
+      </Card>
 
       {metricGroups(metrics).map((group) => (
         <Card key={group.label}>
